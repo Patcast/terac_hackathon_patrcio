@@ -9,6 +9,14 @@ High-level demo: [product_demo.md](./product_demo.md) · Feedback accepted from
 [feedback_product_demo.md](./feedback_product_demo.md) (Entry 1 full, Entry 2 partial,
 Entry 3 full — polish after basic flow).
 
+**Cadence: monthly.** Tammy opens the thread when a month's books settle (~10 days after
+month end). Comparisons are month-over-month against a trailing 12.
+
+> **Building Phase 1?** This page is the end-state script — it includes booking, brief,
+> payment and expert review, none of which Phase 1 builds. The buildable subset, with the
+> failure-path copy and per-beat report sources, is
+> [imessage_flow_phase1.md](./imessage_flow_phase1.md).
+
 **Actors:** **Tammy** = agent · **Owner** = demo participant playing the company
 
 ---
@@ -17,7 +25,7 @@ Entry 3 full — polish after basic flow).
 
 | # | Beat | Who | Purpose |
 |---|---|---|---|
-| 1 | Weekly report | Tammy | Agent texts first |
+| 1 | Monthly report | Tammy | Agent texts first |
 | 2 | Thanks + 👍 | Owner → Tammy | Human touch (Entry 3 — after basic flow works) |
 | 3 | Dig-in 1 | Owner → Tammy | Prove ledger knowledge |
 | 4 | Dig-in 1 answer | Tammy | Odoo-backed |
@@ -38,14 +46,15 @@ Entry 3 full — polish after basic flow).
 
 ## Script
 
-### 1 — Tammy: weekly report
+### 1 — Tammy: monthly report
 
 ```
-Hey — it’s Tammy, your fractional CFO from Tamoa. Quick weekly check-in.
+Hey — it’s Tammy, your fractional CFO from Tamoa. [MONTH]’s books have settled —
+here’s your month.
 
 Cash: about $[CASH]
 Runway: ~[RUNWAY] months
-Watching this week: [TOP_RISK]
+Watching this month: [TOP_RISK]
 
 Want me to dig into anything in the books, or are you thinking about a bigger call
 (hiring, raise, big spend)?
@@ -79,13 +88,13 @@ Biggest line inside that: [LINE_ITEM] (~$[LINE_AMOUNT]).
 ### 5 — Owner: dig-in 2
 
 ```
-Owner: Anything unexpected vs the last few weeks?
+Owner: Anything unexpected vs the last few months?
 ```
 
 ### 6 — Tammy: dig-in 2 answer
 
 ```
-Yes — compared with the prior weeks:
+Yes — compared with the prior months:
 
 • [UNEXPECTED_ITEM] is up ~[DELTA]% (was ~$[BEFORE], now ~$[AFTER])
 • Everything else is roughly in line
@@ -143,7 +152,7 @@ starting next month.
 
 ### 10 — Tammy: book + graphical brief link (Entry 2 partial)
 
-Send **when the call is booked / offered**, not with the opening weekly report.
+Send **when the call is booked / offered**, not with the opening monthly report.
 
 ```
 Got it — I’ll prep cash-flow impact vs runway with that profile.
@@ -191,7 +200,7 @@ Say these in order (short):
 
 1. `Thanks`
 2. `What’s my main cost category right now?`
-3. `Anything unexpected vs the last few weeks?`
+3. `Anything unexpected vs the last few months?`
 4. Hard question — use step 7 primary (hire engineer → how to fund it + trade-offs; OK if answer is don’t hire yet).
 5. `Mid-level engineer, ~$X/yr, full-time, starting next month.` *(pick real $ for the demo DB)*
 
@@ -212,7 +221,7 @@ Say these in order (short):
 |---|---|
 | `[CASH]`, `[RUNWAY]`, `[TOP_RISK]` | Odoo |
 | `[COST_CATEGORY]`, `[AMOUNT]`, … | Odoo |
-| `[UNEXPECTED_ITEM]`, deltas | Odoo week-over-week |
+| `[UNEXPECTED_ITEM]`, deltas | Odoo month-over-month (trailing 12) |
 | `[CAL_COM_OR_CALENDLY_URL]` | Booking link |
 | `[BRIEF_URL]` | Shared call brief |
 | `[STRIPE_PAYMENT_LINK]` | Stripe Payment Link |

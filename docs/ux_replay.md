@@ -3,9 +3,12 @@
 > Messaging is the product. Build this **after** the iMessage script works — including
 > Linq human touch (read / typing / 👍) when possible. Replay is **last** priority.
 > See [imessage_flow.md](./imessage_flow.md).
+>
+> Concrete layout for this surface — app shell, sidebar, block-by-block report:
+> [ui_proposal.md](./ui_proposal.md).
 
 The brief URL is sent in iMessage **when the CFO call is booked**, not with the opening
-weekly report.
+monthly report.
 
 Replay track: Replay QA explores a **web** app, finds bugs, and reports them. It does
 not replace the iMessage demo. In the 2-minute arc it is an **optional last beat**
@@ -23,7 +26,7 @@ Still **one URL, one page**. Not two products (no separate customer app vs accou
 
 | Who | How they use it |
 |---|---|
-| **Owner** | Reviews the weekly report before/during the call; Book + Pay if not done in iMessage |
+| **Owner** | Reviews the monthly report before/during the call; Book + Pay if not done in iMessage |
 | **Human CFO** | Walks the same numbers with the owner; sees what the agent already said and what the owner replied |
 | **Demo / Replay** | Proof the brief loads cleanly and the key actions work |
 
@@ -41,7 +44,7 @@ Still **one URL, one page**. Not two products (no separate customer app vs accou
 
 Keep it boring and useful:
 
-1. **This week’s numbers** — cash, runway, top risk (same as the iMessage report)
+1. **This month’s numbers** — cash, runway, top risk (same as the iMessage report)
 2. **Conversation context** — agent’s last recommendation + owner’s latest reply (and Terac before/after if you have it)
 3. **Call actions** — **Book / join** (same Cal.com link) · **Pay** (Stripe) · optional one-line **suggested agenda** (“Decide: hire next month — yes/no/wait”)
 
@@ -54,7 +57,7 @@ don’t build it.
 ## Flow around the live call
 
 ```
-iMessage weekly report → owner replies → book CFO + pay
+iMessage monthly report → owner replies → book CFO + pay
          ↓
  both open the same brief URL on the call
          ↓

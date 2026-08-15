@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Tamoa — Monthly Brief</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366F1'/%3E%3Ctext x='16' y='22' font-family='system-ui' font-size='17' font-weight='700' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E"
+    />
+    <!--
+      The theme is applied before first paint so a dark-mode user never sees a
+      white flash. It is inline because an external file would be a second
+      round-trip and the flash happens inside it.
+    -->
+    <script>
+      try {
+        const saved = localStorage.getItem("tamoa-theme");
+        const system = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.dataset.theme = saved || system;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to the report</a>
+
+    <div class="app">
+      <aside class="sidebar" id="sidebar" aria-label="Sections">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">T</span>
+          <span class="brand-text">
+            <strong>Tamoa</strong>
+            <small>Finance control</small>
+          </span>
+        </div>
+
+        <button class="company" type="button" data-inert-control aria-haspopup="listbox">
+          <span class="company-mark" id="company-mark" aria-hidden="true">··</span>
+          <span class="company-name" id="company-name">Loading…</span>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6.5 8 10.5 12 6.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+
+        <nav class="nav" id="nav"></nav>
+
+        <div class="sidebar-foot">
+          <div class="ledger-state" id="ledger-state">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="ledger-label">Checking ledger…</span>
+          </div>
+          <p class="read-only">Read-only. Tamoa never writes to your books.</p>
+        </div>
+      </aside>
+
+      <div class="frame">
+        <header class="topbar">
+          <button class="icon-button menu-button" id="menu-toggle" type="button" aria-label="Show sections" aria-expanded="false">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+
+          <nav class="crumbs" aria-label="Breadcrumb">
+            <span>This month</span>
+            <span class="crumb-sep" aria-hidden="true">/</span>
+            <b id="crumb">Monthly Report</b>
+          </nav>
+
+          <div class="omni" data-inert-control role="presentation">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <span>Search accounts, invoices, people</span>
+            <kbd>⌘K</kbd>
+          </div>
+
+          <div class="topbar-actions">
+            <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch theme">
+              <svg class="icon-sun" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6" fill="currentColor"/><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 2v2M10 16v2M18 10h-2M4 10H2M15.7 4.3l-1.4 1.4M5.7 14.3l-1.4 1.4M15.7 15.7l-1.4-1.4M5.7 5.7 4.3 4.3"/></g></svg>
+              <svg class="icon-moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16 11.7A6.6 6.6 0 0 1 8.3 4a6.6 6.6 0 1 0 7.7 7.7Z" fill="currentColor"/></svg>
+            </button>
+            <span class="avatar" id="avatar" aria-hidden="true">··</span>
+          </div>
+        </header>
+
+        <main class="main" id="main" tabindex="-1"></main>
+      </div>
+    </div>
+
+    <div class="scrim" id="scrim" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
