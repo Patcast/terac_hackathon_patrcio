@@ -40,7 +40,7 @@ message becomes a fresh command, a fresh book and a fresh prompt. So:
 - **Tammy never says "as I mentioned"** or refers back. Each reply reads as a complete answer.
 - A follow-up about the **same** month is nearly free — cached book, cached prompt prefix, ~1s
   ([§11](./architecture_phase1.md#11-rendering-and-caching)). A follow-up about a **different** month
-  is a fresh 15-report assemble, ~4s. Order the demo accordingly: two questions about July, then one
+  is a fresh 16-report assemble, ~4s. Order the demo accordingly: two questions about July, then one
   about June if you want to show the cost difference.
 
 ### Rule 2 — the footer is part of the product
@@ -64,8 +64,8 @@ a deliberate design choice rather than a limitation.
 | # | Beat | Who | Book parts it needs | Reports |
 |---|---|---|---|---|
 | 1 | Monthly close-out | Tammy | P&L, trailing 12, cash, runway, partners | 5, 6, 9, 13 |
-| 2 | Dig-in — costs | Owner → Tammy | Trial balance, trailing 12, bills | 7, 6, 2 |
-| 3 | Dig-in — what's unusual | Owner → Tammy | Trailing 12, trial balance | 6, 7 |
+| 2 | Dig-in — costs | Owner → Tammy | Trial balance, per-cost history, bills | 7, 16, 2 |
+| 3 | Dig-in — what's unusual | Owner → Tammy | Per-cost history, trailing 12 | 16, 6 |
 | 4 | Dig-in — who owes me | Owner → Tammy | Open receivables + `AgingAnalyzer` | 3 |
 | 5 | Dig-in — tax accrued | Owner → Tammy | Tax summary | 11 |
 | 6 | Guardrail — "right now" | Owner → Tammy | Cash position, as-of date | 9 |
@@ -123,7 +123,7 @@ shapes, in order of preference:
 |---|---|---|
 | Concentration | PartnerRevenue (13) | `[PARTY] was [PCT]% of July revenue` |
 | Overdue AR | OpenReceivables (3) + `AgingAnalyzer` | `$[AMT] of receivables are 60+ days out` |
-| Trend | TrailingMonths (6) | `[CATEGORY] has risen three months running` |
+| Trend | TrailingByCategory (16) — the line's own rising streak | `[CATEGORY] has risen three months running` |
 
 If none of the three clears a threshold, say so — `Nothing in July looks out of pattern` is a
 perfectly good line and a far better one than a manufactured worry.
@@ -152,8 +152,10 @@ _July 2026 · [N] documents · as of 31 Jul 2026_
 ```
 
 **The third line is the monthly cadence earning its keep.** A single month's cost figure invites the
-wrong reaction; the same figure against a twelve-month average is a finding. It costs nothing extra —
-report 6 is already in the book ([§4](./architecture_phase1.md#b-aggregates--readgroup-on-accountmoveline)).
+wrong reaction; the same figure against a twelve-month average is a finding. That average is
+per-category, so it comes from **report 16**, which holds each cost line's own twelve months
+([§4](./architecture_phase1.md#b-aggregates--readgroup-on-accountmoveline)) — report 6 groups by
+account *type* and can only compare total expenses, which is a different and much weaker sentence.
 
 ### 3 — Owner: dig-in on what's unusual
 
@@ -178,6 +180,10 @@ Everything else sits inside its normal range. Revenue is [up/down] [REV_DELTA]% 
 > before calling it a problem, and say `one-off` when the trailing series shows it as one. This is
 > the characteristic failure mode of monthly reporting
 > ([§4](./architecture_phase1.md#things-that-cost-a-day-if-you-learn-them-late)).
+>
+> It is not left to the prompt alone. Report 16 carries, per line, **how many of the trailing months
+> it moved at all** — an annual premium is 1 of 12, payroll is 12 of 12 — so `one-off` is a fact read
+> off the book rather than a judgement the model makes about a big number.
 
 ### 4 — Owner: who owes me
 
@@ -310,7 +316,8 @@ speed difference is visible on camera.
 | Token | Source | Report |
 |---|---|---|
 | `[REVENUE]`, `[NET]` | ProfitAndLoss | 5 |
-| `[REV_DELTA]`, `[YOY_DELTA]`, `[AVG]`, `[M1..M3]`, `[AVG_NET]` | TrailingMonths | 6 |
+| `[REV_DELTA]`, `[YOY_DELTA]`, `[M1..M3]`, `[AVG_NET]` | TrailingMonths | 6 |
+| `[AVG]` — a **category's** monthly average, and its months-active and rising streak | TrailingByCategory | 16 |
 | `[CASH]` | CashPosition, as of month end | 9 |
 | `[RUNWAY]`, `[RUNWAY_AFTER]` | `RunwayEstimator` — cash ÷ trailing burn | 6 + 9 |
 | `[COST_CATEGORY]`, `[AMOUNT]`, `[PCT]` | TrialBalance / ProfitAndLoss | 7, 5 |
@@ -333,8 +340,8 @@ Mapped to [architecture_phase1.md §14](./architecture_phase1.md#14-build-order)
 |---|---|
 | 1 — Linq echo | Nothing yet; the thread exists |
 | 3 — P&L + CashPosition verified | Beat 1 without runway or the delta: revenue, net, cash |
-| 5 — TrailingMonths + RunwayEstimator | **Beat 1 in full**, plus beats 2 and 3 |
-| 6 — remaining reports | Beats 4 and 5 |
+| 5 — TrailingMonths + RunwayEstimator | **Beat 1 in full** |
+| 6 — remaining reports, including **16 (TrailingByCategory)** | Beats 2 and 3 — each cost against its own history — then 4 and 5 |
 | 7–8 — Claude + presenter wired | The whole script, footer included, end to end |
 | 9 — caching + settling | Follow-ups in ~1s; the settling line; offline demo on fixtures |
 

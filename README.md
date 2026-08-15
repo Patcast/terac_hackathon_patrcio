@@ -9,11 +9,13 @@ Small businesses can't afford a full-time CFO and don't get one from their bookk
 accounting data in Odoo (read-only), answers in plain language, and escalates judgment
 calls to real finance experts.
 
+- **[docs/running.md](docs/running.md)** — how to run everything, and what each part needs
 - **[docs/product_demo.md](docs/product_demo.md)** — 2-minute demo + build-to-demo scope
 - **[docs/imessage_flow.md](docs/imessage_flow.md)** — exact iMessage script (Tammy)
 - **[docs/feedback_product_demo.md](docs/feedback_product_demo.md)** — feedback accept/reject log
 - **[docs/primers.md](docs/primers.md)** — client questions + Terac expert prompts
 - **[docs/ux_replay.md](docs/ux_replay.md)** — web UX + Replay (last priority)
+- **[docs/ui_proposal.md](docs/ui_proposal.md)** — the web brief: layout, data binding, as built
 - **[docs/tech_stack.md](docs/tech_stack.md)** — architecture and integrations
 - **[docs/expert_brief.md](docs/expert_brief.md)** — what we ask the human finance expert for
 ## Getting started
@@ -21,7 +23,13 @@ calls to real finance experts.
 ```bash
 git clone https://github.com/Patcast/terac_hackathon_patrcio.git
 cd terac_hackathon_patrcio
+npm install
+npm run brief          # → http://localhost:3000
 ```
+
+No `.env`, no API keys and no Odoo needed for that last line — it runs the web brief off a
+built-in set of books. Everything else, and what each part needs, is in
+**[docs/running.md](docs/running.md)**.
 
 ## License
 

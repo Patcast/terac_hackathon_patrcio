@@ -3,6 +3,9 @@
 > Messaging is the product. Build this **after** the iMessage script works — including
 > Linq human touch (read / typing / 👍) when possible. Replay is **last** priority.
 > See [imessage_flow.md](./imessage_flow.md).
+>
+> Concrete layout for this surface — app shell, sidebar, block-by-block report:
+> [ui_proposal.md](./ui_proposal.md).
 
 The brief URL is sent in iMessage **when the CFO call is booked**, not with the opening
 monthly report.

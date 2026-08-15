@@ -33,7 +33,7 @@ Runtime: **TypeScript / Node**.
 ```mermaid
 flowchart LR
     C["Owner<br/>iMessage"] -->|"question + month"| T["Tammy<br/>the agent"]
-    T -->|"getMonthlyBook<br/>one call"| A["Assembler<br/>15 reports"]
+    T -->|"getMonthlyBook<br/>one call"| A["Assembler<br/>16 reports"]
     A <-->|"parallel queries"| O["Odoo"]
     A -->|"MonthlyBook"| T
     T -->|"whole book in the prompt"| K["Claude"]
@@ -50,7 +50,7 @@ flowchart LR
 | --------------------------------------------------------- | --------------------------------------------------- |
 | Inbound Linq webhook → question + `Month`                | Payments, checkout, `Engagement` state machine      |
 | One outbound trigger — the monthly close-out, same use case | Agentic retrieval / Claude tool loop               |
-| **One** call → 15 reports assembled into one `MonthlyBook` | Terac expert escalation and review                 |
+| **One** call → 16 reports assembled into one `MonthlyBook` | Terac expert escalation and review                 |
 | Whole book loaded into the prompt                          | Interactive cards, tapbacks, card updates           |
 | One Claude call → one grounded answer                      | Mongo persistence, dashboard, conversation history  |
 | One reply over Linq (plain text), typing indicator         | Forecasting and scenarios — though **runway is in**, see [§5](#5-the-domain-model) |
@@ -199,7 +199,7 @@ src/
 │       └── linq/                LinqConversationChannel
 │
 └── composition/
-    ├── container.ts             ← where the 15 reports get registered
+    ├── container.ts             ← where the 16 reports get registered
     ├── kickoff.ts               ← the monthly close-out trigger (§0) — no logic of its own
     └── server.ts
 ```
@@ -284,7 +284,7 @@ date range of its own.
 
 ## 4. The report catalogue
 
-Fifteen reports. Each is **one class, one query, one part of the book.** Adding a sixteenth is one
+Sixteen reports. Each is **one class, one query, one part of the book.** Adding a seventeenth is one
 file plus one line in the container.
 
 ### A. Documents — `search_read` on `account.move`
@@ -325,6 +325,7 @@ rows. `read_group` makes Odoo sum server-side and hand back tens.
 | 11 | **TaxSummary** | `tax_line_id`, lines where `tax_line_id != false`, month | ~10 | VAT/sales tax **accrued** in the month |
 | 12 | **PartnerBalances** | `partner_id`, receivable + payable accounts, to month end | ~50 | Who owes what, both directions |
 | 13 | **PartnerRevenue** | `partner_id`, income accounts, month | ~40 | Top customers, concentration risk |
+| 16 | **TrailingByCategory** | `account_id` × `account_type` × `date:month`, **trailing 12 months**, P&L accounts, capped to the 14 largest | ~180 | Is *this cost* high — each line against its own history |
 
 **Report 6 is the one that changes with this cadence, and it's the most valuable query in the
 catalogue.** Quarterly, "prior period" was one comparison; monthly, a single prior month is noise —
@@ -340,6 +341,20 @@ one late invoice or a 28-day February moves it more than the business did. So re
 
 Every one of those was expensive or impossible in the quarterly design. This is the payoff for the
 shorter period, and it costs one query.
+
+**Report 16 is report 6 asked one level down, and beat 2 does not work without it.** Grouping by
+`account_type` answers "were expenses higher in July"; the owner asks "was *this cost* higher", and
+"your monthly average for [CATEGORY] is $[AVG]" ([imessage_flow_phase1.md
+beat 2](./imessage_flow_phase1.md#2--owner-dig-in-on-costs)) needs each line's own twelve months, not
+the total of every line together. It is a **separate report rather than a widening of report 6** for
+two reasons: report 6 is what runway depends on, and it stays cheap, and `accounts × months` is an
+order of magnitude more rows — so the mapper keeps only the ~14 accounts carrying the money and drops
+the tail of the chart, which never moves and costs tokens to say nothing.
+
+It also carries the two facts that make the accrual defence *work* rather than merely be asked for in
+the prompt: **how many of the trailing months a line moved at all** (an annual premium shows 1 of 12,
+rent shows 12 of 12 — the same figure meaning opposite things), and **its consecutive rising streak**,
+which is the only grounded way to say "has climbed three months running".
 
 **On report 11 and filing periods — say the honest thing.** A month is an *accrual* period, not
 usually a *filing* period: VAT returns are quarterly in much of Europe, monthly in some regimes and
@@ -643,13 +658,13 @@ This is what lets Tammy's monthly close-out lead with cash *and* runway
 
 ### `BookGap` and tiers
 
-Fifteen queries mean fourteen ways to be *partly* successful. A blanket failure is the wrong
+Sixteen queries mean fifteen ways to be *partly* successful. A blanket failure is the wrong
 response to "the tax report timed out" when the question was about AR.
 
 | Tier | Reports | If it fails |
 |---|---|---|
 | **Required** | P&L, CashPosition, OpenReceivables, CompanyProfile | `isUsable()` false — refuse to answer |
-| **Standard** | **TrailingMonths**, Invoices, Bills, OpenPayables, TrialBalance, Tax, PartnerBalances | Answer, with the gap stated |
+| **Standard** | **TrailingMonths**, **TrailingByCategory**, Invoices, Bills, OpenPayables, TrialBalance, Tax, PartnerBalances | Answer, with the gap stated |
 | **Optional** | BalanceSheet, CashMovements, PartnerRevenue, ChartOfAccounts | Answer, gap noted quietly |
 
 **TrailingMonths sits in Standard, not Optional** — the tier its quarterly predecessor had. Without
@@ -721,21 +736,21 @@ claim you make to prospects.
 
 ### Why the port is coarse
 
-The instinct from the full design is fifteen fine-grained methods with the use case calling them
+The instinct from the full design is sixteen fine-grained methods with the use case calling them
 all. **Don't, not in Phase 1.**
 
 | | Fine-grained port | **One coarse method** |
 |---|---|---|
 | Use case | Orchestrates 14 calls, owns concurrency and partial-failure policy | Calls one thing |
 | Parallelism | Leaks into `application/` | Stays in the adapter, where transport belongs |
-| Caching | Fifteen cache keys | One key: `(clientId, month)` — [§11](#11-rendering-and-caching) |
-| Fixtures | Fake fifteen methods | Fake one, or load one JSON file |
+| Caching | Sixteen cache keys | One key: `(clientId, month)` — [§11](#11-rendering-and-caching) |
+| Fixtures | Fake sixteen methods | Fake one, or load one JSON file |
 
 A port should be phrased at the granularity the use case needs, and Phase 1 needs exactly one thing:
 *the client's books for a month*. That **is** a domain-level request. Whether it costs one round
-trip or fifteen is a fact about Odoo, and facts about Odoo live in the Odoo adapter.
+trip or sixteen is a fact about Odoo, and facts about Odoo live in the Odoo adapter.
 
-The fine-grained calls still exist — as the fifteen `LedgerReport` classes. Phase 2 promotes the
+The fine-grained calls still exist — as the sixteen `LedgerReport` classes. Phase 2 promotes the
 ones the tool loop needs onto the port; nothing is rewritten, it's exposed.
 
 ### The `ReasoningEngine` port — deliberately single-shot
@@ -858,8 +873,8 @@ right: **you could add a report about inventory and not touch this file.**
 
 Three properties worth naming:
 
-- **Concurrency is capped at 6.** The JSON-2 API is one model call per request — fifteen reports are
-  fifteen HTTP requests, and firing all of them at a small Odoo instance is how you discover its
+- **Concurrency is capped at 6.** The JSON-2 API is one model call per request — sixteen reports are
+  sixteen HTTP requests, and firing all of them at a small Odoo instance is how you discover its
   worker pool. Six in flight completes the catalogue in about two round trips.
 - **Per-report timeout, not a global one.** One slow report shouldn't eat the budget that the other
   fourteen need. A timeout is just another gap.
@@ -889,7 +904,7 @@ export class AnswerMonthlyQuestion {
     // The adapter parsed a month out of the message, or fell back to the last settled one.
     const month = cmd.month ?? Month.lastClosed(now, this.settlingDays);
 
-    // One call. Fifteen reports happen behind it — that's the adapter's business.
+    // One call. Sixteen reports happen behind it — that's the adapter's business.
     const book = await this.accounting.getMonthlyBook(client.id, month);
 
     // Pure arithmetic over the book — no query, no forecast. Null when it isn't answerable.
@@ -922,7 +937,7 @@ a test double.
 
 Note what *isn't* here: no retry, no timeout, no concurrency cap, no partial-failure branch. Those
 are real concerns and they all belong to the assembler, the only component that knows there are
-fifteen network calls to fail.
+sixteen network calls to fail.
 
 ---
 
@@ -1004,7 +1019,7 @@ sequenceDiagram
         K-->>U: MonthlyBook — zero Odoo calls
     else cold
         K->>A: assemble(clientId, 2026-07)
-        par 15 reports, 6 in flight
+        par 16 reports, 6 in flight
             A->>D: search_read — documents (1–4)
             A->>D: read_group — aggregates (5–13)
             A->>D: search_read — reference (14–15)
@@ -1083,7 +1098,7 @@ async getMonthlyBook(clientId: ClientId, month: Month): Promise<MonthlyBook> {
 }
 ```
 
-1. **Book cache** — skip all fifteen Odoo queries for a month already assembled.
+1. **Book cache** — skip all sixteen Odoo queries for a month already assembled.
 2. **Prompt cache** — the rendered book is a stable prefix, so a `cache_control` breakpoint after it
    means follow-up questions read it at ~0.1× input price
    ([tech_stack.md §4](./tech_stack.md)).
@@ -1115,6 +1130,7 @@ is still the right call in Phase 1, and there is no eviction policy to get wrong
 | 1 | Company profile, chart of accounts | Stable across every client request → **cache breakpoint here** |
 | 2 | Headline: P&L, cash position, runway, tax accrued | The answer to most questions is in ~30 lines |
 | 3 | **Trailing 12 months, one row per month** | Renders as a table the model can read as a trend — the context that stops a one-off bill reading as a crisis |
+| 3b | **Each cost's own 12 months**, one row per account, with its average, months-active and rising streak | Where the trend above becomes actionable: it is what lets a reply say *this line* is high, and what tells an annual premium from a payroll run |
 | 4 | Aggregates: trial balance, balance sheet, partners | Depth when the question needs it |
 | 5 | Document tables: invoices, bills, open AR/AP | Most tokens, least often needed line-by-line |
 | 6 | Gaps: "the following could not be read…", "books still settling" | Last thing read before the question |
@@ -1124,8 +1140,8 @@ own numbers in detail, which is the order a CFO reads them in — and it's the s
 against the accrual-spike failure mode in [§4](#things-that-cost-a-day-if-you-learn-them-late).
 Twelve rows of six figures is a rounding error in tokens and it changes the character of the answers.
 
-**Token budget.** ~110 document rows plus ~300 aggregate rows (trailing series included) as compact
-pipe-delimited tables lands around **8–12K tokens** against a 1M window — roughly a third of the
+**Token budget.** ~110 document rows plus ~300 aggregate rows (both trailing series included, report
+16 capped at 12 rendered accounts) as compact pipe-delimited tables lands around **8–12K tokens** against a 1M window — roughly a third of the
 quarterly design's. Two things follow: the caps below almost never bind for a single month, and
 there is room for Phase 1.5 to add live balances or a second month without re-architecting anything.
 
@@ -1164,6 +1180,7 @@ export function buildContainer(env: Env) {
     new PartnerRevenueReport(rpc, mapper),     // 13
     new ChartOfAccountsReport(rpc, mapper),    // 14
     new CompanyProfileReport(rpc, mapper),     // 15
+    new TrailingByCategoryReport(rpc, mapper), // 16 ← beat 2's comparison, see §4
   ];
 
   const live = new OdooAccountingRepository(new MonthlyBookAssembler(reports, clock));
@@ -1244,7 +1261,7 @@ caring. Ten days is a starting guess — **ask the client's bookkeeper what day 
 | 3   | Assembler + **two** reports (P&L, CashPosition) | `LedgerReport`, `MonthlyBookAssembler`, `OdooJsonApiClient`, `OdooMapper` | A script prints July's revenue and bank balance as `Money` |
 | 4   | Verify against Odoo's own UI                  | —                                                                        | **The two numbers match what Odoo reports on screen**    |
 | 5   | **Report 6 — trailing 12 months**             | `TrailingMonthsReport`, `TrailingMonths`, `RunwayEstimator`               | Twelve months print as a table; runway is a number you'd say out loud |
-| 6   | The remaining 12 reports                      | `adapters/outbound/odoo/reports/`                                        | Full book assembles; gaps empty                          |
+| 6   | The remaining 13 reports                      | `adapters/outbound/odoo/reports/`                                        | Full book assembles; gaps empty                          |
 | 7   | Claude answers over the book                  | `ReasoningEngine`, `BookRenderer`, `AnswerMonthlyQuestion`, `AnswerValidator` | A question in → a grounded answer out              |
 | 8   | Reply in the thread with the as-of footer     | `IMessageAnswerPresenter`, wiring in `LinqWebhookController`              | **The Phase 1 demo runs end to end**                     |
 | 9   | Caching + settling + fixture capture          | `CachingAccountingRepository`, `Month.isSettled`, `FixtureBookRepository` | Follow-up questions answer in ~1s; demo runs offline     |
@@ -1285,13 +1302,42 @@ verification in step 4 is how you lose the demo.
 
 ---
 
+### What the build changed
+
+Six things this document did not predict, all of them now in the code. They are listed here rather
+than folded silently into the text above, because the gap between a design and what the ledger and
+the runtime actually do is the useful part.
+
+- **Report 16 exists**, and beat 2 is why ([§4](#4-the-report-catalogue)). Report 6 by
+  `account_type` cannot say whether *this cost* is high, which is the question the script asks.
+- **Odoo Online rate-limits the six-in-flight fan-out.** A 429 came back as a wall of `BookGap`s on
+  the first live run. `OdooJsonApiClient` now retries 429 and 5xx with jittered backoff, bounded to
+  fit inside the per-report timeout — a rate limit is "come back in a moment", not a missing report.
+- **Every report takes an `OdooCompanyContext`.** Every `Money` needs a currency, and no report can
+  wait on report 15 for it, so one promise-memoized `res.company` read is shared across the
+  catalogue. The §12 sketch's `new XReport(rpc, mapper)` is `odooReportCatalogue(rpc, mapper, company)`.
+- **`Money` reads Odoo's `_signed` document fields**, not the plain pair: they are already in company
+  currency with credit notes negative, which settles the refund and multi-currency hazards
+  ([§4](#things-that-cost-a-day-if-you-learn-them-late)) in one move.
+- **`Tier` is a const object, not an `enum`, and the app runs under `tsx`.** Node's built-in
+  TypeScript support strips types only — enums and parameter properties are not erasable syntax.
+- **`Runway.of(...)`, not `Runway.months(...)`** as [§5](#5-the-domain-model) sketches: the factory
+  name collided with the `months` property it returns.
+
+And two bugs worth remembering, both caught by the boundary tests this document argues for:
+`Month.parse` matched month names inside ordinary words, so "how is **mar**keting doing?" resolved to
+March — an answer about a month nobody asked about. And `Period.days()` counted elapsed milliseconds
+against an `endsOn()` that is the last *instant* of the month, making every month a day too long.
+
+---
+
 ## 15. Seams — what Phase 2 plugs into
 
 **None of these modify `AnswerMonthlyQuestion`'s shape or anything in `domain/model`.**
 
 | Phase 2 feature | Plugs in as | What moves |
 |---|---|---|
-| A 16th report (inventory, payroll, analytics) | One `LedgerReport` class + one line in `container.ts` | **Nothing else.** The assembler is generic over its sources. |
+| A 17th report (inventory, payroll, analytics) | One `LedgerReport` class + one line in `container.ts` | **Nothing else.** The assembler is generic over its sources — report 16 was added exactly this way, after the fact, and touched no other file. |
 | Tool loop / agentic retrieval | `ReasoningEngine.answer` → `reason()` with a `ReasoningOutcome` union; add `ToolRegistry` | Use case gains a loop. **Each report becomes a tool** — the catalogue is already the tool list. |
 | Live "as of today" answers | A `Period.toDate(now)` variant of the same reports | `Month` stops being the only input; reports are unchanged. Monthly already shrinks this from a gap to a nicety. |
 | Multi-month questions beyond report 6's window | Assemble N books, or a `BookSeries` value object | Assembler runs per month; caching makes it nearly free. Anything inside twelve months is already answered. |

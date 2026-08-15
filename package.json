@@ -6,7 +6,12 @@
     "doc": "docs"
   },
   "scripts": {
+    "start": "tsx src/composition/server.ts",
+    "brief": "USE_FIXTURES=true tsx src/composition/server.ts",
+    "kickoff": "tsx src/composition/kickoff.ts",
+    "ask": "tsx src/composition/ask.ts",
     "test": "vitest run",
+    "test:unit": "vitest run tests/domain tests/application tests/adapters tests/presentation tests/architecture",
     "typecheck": "tsc --noEmit"
   },
   "repository": {
@@ -27,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }

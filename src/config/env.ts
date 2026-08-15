@@ -60,6 +60,66 @@ export interface OdooConfig {
   apiKey: string;
 }
 
+/**
+ * The Phase 1 knobs (docs/architecture_phase1.md §13). None are secrets and all
+ * have defaults, so a missing `.env` still boots — unlike the vendor configs
+ * above, which fail loudly rather than pretend.
+ *
+ * `settlingDays` is the one to think about rather than copy: it decides which
+ * month Tammy talks about by default, so it is a product setting wearing a
+ * config variable's clothes.
+ */
+export interface Phase1Config {
+  settlingDays: number;
+  trailingMonths: number;
+  runwayWindowMonths: number;
+  reportConcurrency: number;
+  reportTimeoutMs: number;
+  bookCacheEnabled: boolean;
+  useFixtures: boolean;
+  clientRegistryJson: string | null;
+  /**
+   * The two links the brief's call-to-action block offers, and the price beside
+   * them (docs/imessage_flow.md beats 10 and 11).
+   *
+   * Null rather than a placeholder URL: an unconfigured booking button renders
+   * as visibly unavailable, where a `https://cal.com/example` default would
+   * render as a working one and 404 on stage.
+   */
+  bookingUrl: string | null;
+  paymentUrl: string | null;
+  sessionPrice: string | null;
+}
+
+function number(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function boolean(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
+export function phase1Config(): Phase1Config {
+  return {
+    settlingDays: number("SETTLING_DAYS", 10),
+    trailingMonths: number("TRAILING_MONTHS", 12),
+    runwayWindowMonths: number("RUNWAY_WINDOW_MONTHS", 3),
+    reportConcurrency: number("REPORT_CONCURRENCY", 6),
+    reportTimeoutMs: number("REPORT_TIMEOUT_MS", 8_000),
+    bookCacheEnabled: boolean("BOOK_CACHE_ENABLED", true),
+    useFixtures: boolean("USE_FIXTURES", false),
+    clientRegistryJson: process.env["CLIENT_REGISTRY_JSON"]?.trim() || null,
+    bookingUrl: process.env["BOOKING_URL"]?.trim() || null,
+    paymentUrl: process.env["PAYMENT_URL"]?.trim() || null,
+    sessionPrice: process.env["SESSION_PRICE"]?.trim() || null,
+  };
+}
+
 export function claudeConfig(): ClaudeConfig {
   const env = read("Claude", ["ANTHROPIC_API_KEY"]);
   return { apiKey: env("ANTHROPIC_API_KEY") };

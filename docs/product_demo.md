@@ -5,6 +5,7 @@
 
 Stack: [tech_stack.md](./tech_stack.md) · iMessage script: [imessage_flow.md](./imessage_flow.md) ·
 Primers: [primers.md](./primers.md) · UX / Replay (last): [ux_replay.md](./ux_replay.md) ·
+Web UI proposal: [ui_proposal.md](./ui_proposal.md) ·
 Feedback: [feedback_product_demo.md](./feedback_product_demo.md)
 
 ---
