@@ -11,6 +11,7 @@ need human judgment to real finance experts.
 
 - **[docs/tech_stack.md](docs/tech_stack.md)** — architecture and integrations
 - **[docs/product_demo.md](docs/product_demo.md)** — what it does and the demo flow
+- **[docs/expert_brief.md](docs/expert_brief.md)** — what we ask the human finance expert for
 
 ## Getting started
 
