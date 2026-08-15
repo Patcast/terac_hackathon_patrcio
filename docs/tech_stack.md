@@ -76,7 +76,7 @@ What we use beyond plain text:
 | **Typing indicator** | Loading state while Claude and Odoo are working. |
 | **Read receipts** | Know whether the CFO advice actually landed. |
 | **Realtime webhooks** | Inbound trigger for the whole agent loop. |
-| **Agent Pay / Apple Pay App Clip** | Checkout inside the thread; funds settle to our own Stripe account. |
+| **Payment requests / Apple Pay App Clip** | Checkout inside the thread; direct charges settle to our own Stripe account. |
 
 > Design rule: treat messaging primitives as UI. A tapback is a vote, a group thread is a
 > multi-stakeholder finance review.
@@ -105,7 +105,7 @@ Model ID: **`claude-opus-5`** — $5 / $25 per million tokens (in/out), 1M conte
 | `list_open_bills` | AP — what we owe, when |
 | `run_scenario` | Cash runway projection under assumptions |
 | `ask_expert` | Escalate to the Terac human panel |
-| `send_payment_link` | Drop the Stripe payment link into the thread |
+| `request_payment` | Create a Linq payment request and drop its `checkout_url` into the thread |
 | `send_imessage_card` | Render an interactive Linq card |
 
 - **Guardrails:** the agent must never invent a number. Every figure in a reply has to
@@ -182,12 +182,32 @@ How we use it:
 
 ## 7. Stripe — payments
 
+Runs on a **new personal Stripe account** (`Tamoa`), deliberately separate from any existing
+business account — the read-only key we hand organizers grants Charges/Balance read over
+the *whole* account, so a fresh account means it can only ever expose hackathon revenue.
+Step-by-step: [stripe_walkthrough.md](./stripe_walkthrough.md).
+
 Two separate jobs, don't conflate them.
 
-**a) Collecting revenue.** One Payment Link, reused for every transaction, with
-**"Customer chooses price"** so variable CFO engagements don't each need a new link. The
-agent sends this link in the iMessage thread (or triggers Linq Agent Pay, which settles to
-the same Stripe account).
+**a) Collecting revenue.** **Primary path: Linq payment requests.** `POST /v3/payment_requests`
+with an amount in minor units returns a `checkout_url`; we send that into the thread and the
+client pays — **Apple Pay App Clip on a supported iPhone, web checkout everywhere else.**
+A `payment.succeeded` webhook confirms it.
+
+Payments run on **Stripe Connect Standard with direct charges**, so **we are the merchant of
+record**: the money, the payout schedule, and the compliance surface are ours, and Linq is
+never in the funds flow. Contract detail and payloads:
+[architecture.md §9](./architecture.md#9-payments--linq-payment-requests).
+
+> ⚠️ **Refunds, disputes and chargebacks are ours**, done in our own Stripe Dashboard. The Linq
+> API has no refund or dispute endpoint by design.
+
+**Keep the Stripe Payment Link too** — one link, reused, with **"Customer chooses price"**. Not
+for device coverage (the `checkout_url` already works everywhere), but because:
+
+- It's the artifact submitted to organizers, and this doc's own rule is never to change it.
+- It's the cold fallback if Connect onboarding isn't `charges_enabled` in time — a real risk,
+  since payment-request creation hard-fails with **403** until it is. Do the onboarding early.
 
 **b) Hackathon revenue tracking.** Organizers need read-only visibility:
 - Create a **restricted key** named `hackathon-readonly` with **Balance: Read** and
@@ -196,11 +216,22 @@ the same Stripe account).
 - **Never** generate or share the secret key (`sk_`). Never change the payment link
   mid-event — revenue tracking would miss the new one.
 
-Full steps are in the committed `docs/stripe_set_up.md` (recover with
-`git show HEAD:docs/stripe_set_up.md`).
+> ⚠️ **Confirm how organizers attribute revenue.** Linq direct charges land in this account, so
+> Balance/Charges reads see them — but if attribution is *per Payment Link*, in-thread payments
+> would report as zero. Ask. Until answered, push at least one real transaction through the
+> submitted Payment Link.
+
+**Live values** (link is public and safe to commit; keys are not — they live in Render):
+
+| Value | Status |
+|---|---|
+| Payment Link URL | ⬜ `TODO — paste the buy.stripe.com link` |
+| Team name submitted | `Tamoa` |
+| `rk_live_` restricted key | ⬜ not in this repo — password manager / submission form only |
 
 Also worth claiming: Stripe Atlas offer — 20% off + $2,500 in credits
-(<https://dashboard.stripe.com/atlas/invite/b5zxto4k>).
+(<https://dashboard.stripe.com/atlas/invite/b5zxto4k>). Only relevant if we incorporate a
+new entity; unrelated to the payment requirement.
 
 ---
 
@@ -258,6 +289,8 @@ ANTHROPIC_API_KEY=
 LINQ_API_KEY=
 LINQ_PHONE_NUMBER=
 LINQ_WEBHOOK_SECRET=
+LINQ_PAYMENT_WEBHOOK_SECRET=     # Standard Webhooks signing secret for payment events
+LINQ_CHECKOUT_SLUG=              # partner slug in checkout_url
 
 # Odoo  (read-only service user — see §5)
 ODOO_URL=            # https://<company>.odoo.com
@@ -289,11 +322,13 @@ Ship a thin vertical slice first, then deepen.
    integration; do it early.
 3. **Claude loop** — Opus 5 with `get_financials` only. Ask "how's my cash?" over
    iMessage, get a grounded answer.
-4. **Stripe payment link** in the thread + the `rk_` key submitted to organizers. Do this
+4. **Connect the Stripe account to Linq first** (payment requests 403 until `charges_enabled`),
+   then **checkout in the thread** + the `rk_` key submitted to organizers. Do this
    before the deadline pressure, not after.
 5. **Terac expert loop** — escalate, collect ratings, record the before/after delta.
 6. **Lovable dashboard** + **Replay recordings** of all four flows.
-7. Interactive Linq cards and Agent Pay if time remains — highest demo payoff per minute.
+7. Richer interactive Linq cards beyond checkout if time remains — highest demo payoff per
+   minute. (Payments moved up to step 4; they're the primary rail, not a bonus.)
 
 ---
 
