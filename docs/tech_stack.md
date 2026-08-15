@@ -186,7 +186,6 @@ How we use it:
 Runs on a **new personal Stripe account** (`Tamoa`), deliberately separate from any existing
 business account — the read-only key we hand organizers grants Charges/Balance read over
 the *whole* account, so a fresh account means it can only ever expose hackathon revenue.
-Step-by-step: [stripe_walkthrough.md](./stripe_walkthrough.md).
 
 Two separate jobs, don't conflate them.
 
