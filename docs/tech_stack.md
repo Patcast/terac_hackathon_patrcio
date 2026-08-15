@@ -7,9 +7,10 @@ recruited through the Terac API/MCP.
 
 Product scope lives in [product_demo.md](./product_demo.md). This doc is the stack.
 
-> **Naming:** **Tamoa** is our product. **Terac** is the hackathon organizer and the
-> third-party service we call to reach real finance experts. Where this doc says "Terac"
-> it means their API/MCP, not us.
+> **Naming:** **Tamoa** is our product. **Tammy** is the agent the client texts (save the
+> Linq number as “Tammy”). **Terac** is the hackathon organizer and the third-party
+> service we call to reach real finance experts. Where this doc says "Terac" it means
+> their API/MCP, not us.
 
 ---
 
@@ -17,7 +18,7 @@ Product scope lives in [product_demo.md](./product_demo.md). This doc is the sta
 
 | Layer | Choice | Why |
 |---|---|---|
-| Conversational UI | **Linq** (iMessage / RCS / SMS) | Client talks to their CFO in the blue bubble. No app to install. |
+| Conversational UI | **Linq** (iMessage / RCS / SMS) | Client talks to **Tammy** in the blue bubble. No app to install. |
 | Reasoning engine | **Claude Opus 5** (`claude-opus-5`) | The CFO brain — analysis, narrative, tool orchestration. |
 | Accounting data | **Odoo** external API | Source of truth for P&L, AR/AP, cash, invoices. |
 | Human expertise | **Terac** API/MCP | Real finance experts review, rate, and correct the agent's output. |
@@ -65,7 +66,7 @@ every event.
 
 - **Setup:** <https://linqapp.com/hackathon> → Sandbox Signup → select **"Hackathon"** in the
   "How did you hear about us?" dropdown. Apply their best-practices instructions.
-- **We get a real phone number** the agent owns. The client saves it as "My CFO".
+- **We get a real phone number** the agent owns. The client saves it as **Tammy**.
 
 What we use beyond plain text:
 
