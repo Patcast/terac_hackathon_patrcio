@@ -6,6 +6,10 @@ crosses each boundary.
 Stack decisions live in [tech_stack.md](./tech_stack.md). Product scope lives in
 [product_demo.md](./product_demo.md). **This doc is the shape of the code.**
 
+> **Naming:** **Tamoa** = the product · **Tammy** = the agent the owner texts
+> ([imessage_flow.md](./imessage_flow.md)). Class and folder names below are Tamoa's internals;
+> "Tammy" appears only where the client-facing agent is meant.
+
 Runtime: **TypeScript / Node**, one language across the agent service and the dashboard API.
 
 ---

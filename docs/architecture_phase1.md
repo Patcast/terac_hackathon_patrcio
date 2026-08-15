@@ -1,11 +1,15 @@
 # Architecture — Phase 1
 
-**One flow, end to end: a client texts a question about a quarter, Tamoa assembles that quarter's
-complete books out of Odoo, puts them in Claude's context, and answers in the thread.**
+**One flow, end to end: a client texts Tammy a question about a quarter, Tamoa assembles that
+quarter's complete books out of Odoo, puts them in Claude's context, and answers in the thread.**
 
 Phase 1 is **quarter-scoped by design**. You name a year and a quarter — `2026-Q2` — and Tamoa
 returns everything a fractional CFO would want in front of them for that period. No payments, no
 expert review, no dashboard, no tool loop.
+
+> **Naming:** **Tamoa** = the product · **Tammy** = the agent the owner texts
+> ([imessage_flow.md](./imessage_flow.md)). Class and folder names in this doc are Tamoa's
+> internals; "Tammy" appears only where the client-facing agent is meant.
 
 The end-state design lives in [architecture.md](./architecture.md); stack decisions in
 [tech_stack.md](./tech_stack.md). This doc is the subset you build first — same rings, same rules.
@@ -19,7 +23,7 @@ Runtime: **TypeScript / Node**.
 
 ```mermaid
 flowchart LR
-    C["Client<br/>iMessage"] -->|"question + quarter"| T["Tamoa"]
+    C["Owner<br/>iMessage"] -->|"question + quarter"| T["Tammy<br/>the agent"]
     T -->|"getQuarterlyBook<br/>one call"| A["Assembler<br/>15 reports"]
     A <-->|"parallel queries"| O["Odoo"]
     A -->|"QuarterlyBook"| T
