@@ -1,9 +1,9 @@
 # Architecture — Phase 1
 
-**One flow, end to end: a client texts Tammy a question about a quarter, Tamoa assembles that
-quarter's complete books out of Odoo, puts them in Claude's context, and answers in the thread.**
+**One flow, end to end: a client texts Tammy a question about a month, Tamoa assembles that
+month's complete books out of Odoo, puts them in Claude's context, and answers in the thread.**
 
-Phase 1 is **quarter-scoped by design**. You name a year and a quarter — `2026-Q2` — and Tamoa
+Phase 1 is **month-scoped by design**. You name a year and a month — `2026-07` — and Tamoa
 returns everything a fractional CFO would want in front of them for that period. No payments, no
 expert review, no dashboard, no tool loop.
 
@@ -15,6 +15,15 @@ The end-state design lives in [architecture.md](./architecture.md); stack decisi
 [tech_stack.md](./tech_stack.md). This doc is the subset you build first — same rings, same rules.
 Everything cut has a named seam in [§15](#15-seams--what-phase-2-plugs-into).
 
+**The thread this has to produce** is scripted in
+[imessage_flow_phase1.md](./imessage_flow_phase1.md) — the Phase 1 cut of
+[imessage_flow.md](./imessage_flow.md), covering only what Linq, Odoo and one Claude call can
+actually deliver. If a beat there needs something this doc doesn't build, one of the two is wrong.
+
+**Cadence: monthly.** Tammy reaches out when a month's books settle, and every question resolves to
+one month. That choice is what [§0](#0-scope) and [§3](#3-month--the-input-that-defines-everything)
+are mostly about.
+
 Runtime: **TypeScript / Node**.
 
 ---
@@ -23,10 +32,10 @@ Runtime: **TypeScript / Node**.
 
 ```mermaid
 flowchart LR
-    C["Owner<br/>iMessage"] -->|"question + quarter"| T["Tammy<br/>the agent"]
-    T -->|"getQuarterlyBook<br/>one call"| A["Assembler<br/>15 reports"]
+    C["Owner<br/>iMessage"] -->|"question + month"| T["Tammy<br/>the agent"]
+    T -->|"getMonthlyBook<br/>one call"| A["Assembler<br/>15 reports"]
     A <-->|"parallel queries"| O["Odoo"]
-    A -->|"QuarterlyBook"| T
+    A -->|"MonthlyBook"| T
     T -->|"whole book in the prompt"| K["Claude"]
     K -->|"answer"| T
     T -->|"reply"| C
@@ -39,36 +48,62 @@ flowchart LR
 
 | In                                                        | Out (Phase 2+)                                      |
 | --------------------------------------------------------- | --------------------------------------------------- |
-| Inbound Linq webhook → question + `Quarter`                | Payments, checkout, `Engagement` state machine      |
-| **One** call → 15 reports assembled into one `QuarterlyBook` | Agentic retrieval / Claude tool loop              |
-| Whole book loaded into the prompt                          | Terac expert escalation and review                  |
-| One Claude call → one grounded answer                      | Interactive cards, tapbacks, card updates           |
-| One reply over Linq (plain text)                           | Mongo persistence, dashboard, conversation history  |
-| In-memory client registry                                  | Forecasting, scenarios, anything about *today*      |
+| Inbound Linq webhook → question + `Month`                | Payments, checkout, `Engagement` state machine      |
+| One outbound trigger — the monthly close-out, same use case | Agentic retrieval / Claude tool loop               |
+| **One** call → 15 reports assembled into one `MonthlyBook` | Terac expert escalation and review                 |
+| Whole book loaded into the prompt                          | Interactive cards, tapbacks, card updates           |
+| One Claude call → one grounded answer                      | Mongo persistence, dashboard, conversation history  |
+| One reply over Linq (plain text), typing indicator         | Forecasting and scenarios — though **runway is in**, see [§5](#5-the-domain-model) |
+| In-memory client registry                                  | Anything about *today*                              |
 
 **One call per layer.** The controller calls one use case method; the use case makes one port call;
 the adapter's assembler fans out across the report catalogue and returns one object. Fan-out lives at
 the bottom, where it's a transport concern.
 
-### The two consequences of locking to quarters
+**The outbound trigger is not a second flow.** A monthly cadence means Tammy texts first, so
+something has to fire when a month settles — an internal route or a cron-invoked script in
+`composition/` that calls `AnswerMonthlyQuestion` with a canned close-out question and sends the
+result over `ConversationChannel`. Same use case, same book, same presenter; only the entry point
+differs. If that trigger starts acquiring its own logic — deciding what to say, formatting its own
+message — it has become a second flow, and that's the bug.
 
-**1. A closed quarter never changes — so cache it forever.** This is the big win and it's free.
-Q2 2026's books are the same at every reading, which means the assembled `QuarterlyBook` is
-cacheable per `(clientId, quarter)`, and the rendered prompt block is a stable
-`cache_control` prefix. **Second and later questions about the same quarter cost zero Odoo calls and
-hit Claude's prompt cache at ~0.1× input price** ([tech_stack.md §4](./tech_stack.md)). A follow-up
-question answers in about a second.
+### The four consequences of locking to months
 
-**2. Phase 1 cannot answer about *today*.** Everything point-in-time — cash balance, open
-receivables — is **as of quarter end**, not as of now. Ask "how much is in the bank right now?" for a
-quarter that closed six weeks ago and the honest answer is a number from six weeks ago. Say the
-as-of date in the reply footer, put it in the prompt, and don't let the model paper over it. Live
-balances are one extra query and a Phase 1.5 decision — not a Phase 1 one.
+**1. A settled month never changes — so cache it forever.** July 2026's books read the same every
+time, which makes the assembled `MonthlyBook` cacheable per `(clientId, month)` and the rendered
+prompt block a stable `cache_control` prefix. **Second and later questions about the same month cost
+zero Odoo calls and hit Claude's prompt cache at ~0.1× input price**
+([tech_stack.md §4](./tech_stack.md)). A follow-up answers in about a second.
 
-**The bar Phase 1 has to clear:** *anything a founder or their accountant asks when closing a
-quarter.* What did we make. Who owes us and how late. What do we owe. How much VAT do we file. Which
-customer is 40% of revenue. How does this compare to last quarter. Every one of those comes out of
-the catalogue in [§4](#4-the-report-catalogue).
+*Settled*, not merely *ended* — see consequence 4.
+
+**2. Staleness is bounded at about five weeks, and usually much less.** Phase 1 still can't answer
+about *today*: every point-in-time figure — cash, open receivables — is **as of month end**. But the
+gap between "as of" and "now" is at most a month plus the settling window, and on the day Tammy
+sends the monthly close-out it's a few days. That is the difference between a caveat and a defect.
+Say the as-of date in the reply footer, put it in the prompt, and don't let the model paper over
+it. Live balances remain one extra query and a Phase 1.5 decision.
+
+**3. Comparatives get cheap, so buy a lot of them.** One month on its own is noisy — invoice timing,
+month length and a single large bill all swamp the signal. So report 6 pulls the **trailing twelve
+months** grouped by month in a single `read_group`, which answers "vs last month", "vs the same
+month last year", and "is this a trend or a blip" from one query. A month's book is also roughly a
+third the documents of a quarter's, so the whole thing lands near 10K tokens with the trailing year
+included. **Monthly buys better context and a smaller prompt at the same time** — that is the
+argument for this cadence.
+
+**4. A calendar month ends before an accounting month closes.** Late vendor bills, bank
+reconciliation and payroll accruals land in the first days of the following month. A month that
+ended yesterday is not a month you should cache forever or quote without qualification. Phase 1
+handles this with an explicit **settling window** (`SETTLING_DAYS`, default 10) that gates both
+`Month.lastClosed` and the cache — [§3](#3-month--the-input-that-defines-everything) and
+[§11](#11-rendering-and-caching). This is the one thing monthly costs you that quarterly did not,
+and it is ten lines.
+
+**The bar Phase 1 has to clear:** *anything a founder or their accountant asks at month-end close.*
+What did we make. Who owes us and how late. What do we owe. What VAT did we accrue. Which customer
+is 40% of revenue. How does this compare with last month, and with the same month last year. Every
+one of those comes out of the catalogue in [§4](#4-the-report-catalogue).
 
 ---
 
@@ -82,16 +117,16 @@ flowchart TB
         direction LR
         IN["LinqWebhookController"]
         PRES["IMessageAnswerPresenter"]
-        OUT["QuarterlyBookAssembler + 15 OdooReports<br/>ClaudeReasoningEngine<br/>LinqConversationChannel"]
+        OUT["MonthlyBookAssembler + 15 OdooReports<br/>ClaudeReasoningEngine<br/>LinqConversationChannel"]
     end
 
     subgraph L3["application/ — orchestration"]
-        UC["AnswerQuarterlyQuestion"]
+        UC["AnswerMonthlyQuestion"]
         PORTS["Ports — interfaces only<br/>AccountingRepository · ReasoningEngine<br/>ConversationChannel · Clock"]
     end
 
     subgraph L2["domain/ — the product"]
-        DOM["Money · Quarter · Period · Invoice · Client<br/>QuarterlyBook + its 15 parts<br/>GroundedAnswer · AnswerValidator"]
+        DOM["Money · Month · Period · Invoice · Client<br/>MonthlyBook + its 15 parts<br/>GroundedAnswer · AnswerValidator"]
     end
 
     IN --> UC
@@ -121,19 +156,20 @@ Smoke test: **`domain/` compiles and its tests pass with the network unplugged a
 src/
 ├── domain/                      ← zero dependencies. Pure TypeScript.
 │   ├── model/
-│   │   ├── Money.ts             Period.ts  Quarter.ts  Ids.ts
+│   │   ├── Money.ts             Period.ts  Month.ts  Ids.ts
 │   │   ├── Invoice.ts           InvoiceLedger.ts
 │   │   ├── book/                The 15 parts — one file each
-│   │   │   ├── ProfitAndLoss.ts       BalanceSheet.ts    TrialBalance.ts
-│   │   │   ├── CashPosition.ts        CashMovements.ts   TaxSummary.ts
-│   │   │   ├── PartnerBalances.ts     PartnerRevenue.ts  ChartOfAccounts.ts
-│   │   │   └── CompanyProfile.ts
-│   │   ├── QuarterlyBook.ts     BookGap.ts  BookPart.ts
-│   │   ├── Client.ts
+│   │   │   ├── ProfitAndLoss.ts       TrailingMonths.ts  BalanceSheet.ts
+│   │   │   ├── TrialBalance.ts        CashPosition.ts    CashMovements.ts
+│   │   │   ├── TaxSummary.ts          PartnerBalances.ts PartnerRevenue.ts
+│   │   │   └── ChartOfAccounts.ts     CompanyProfile.ts
+│   │   ├── MonthlyBook.ts     BookGap.ts  BookPart.ts
+│   │   ├── Client.ts          Runway.ts
 │   │   └── GroundedAnswer.ts    Evidence.ts
 │   ├── services/
 │   │   ├── AnswerValidator.ts
-│   │   └── AgingAnalyzer.ts     ← pure; derives buckets from open invoices
+│   │   ├── AgingAnalyzer.ts     ← pure; derives buckets from open invoices
+│   │   └── RunwayEstimator.ts   ← pure; cash ÷ trailing burn, no new query (§5)
 │   └── errors/
 │
 ├── application/                 ← depends on domain only
@@ -141,7 +177,7 @@ src/
 │   │   ├── AccountingRepository.ts   ReasoningEngine.ts
 │   │   └── ConversationChannel.ts    Clock.ts
 │   ├── usecases/
-│   │   └── AnswerQuarterlyQuestion.ts
+│   │   └── AnswerMonthlyQuestion.ts
 │   └── dto/                     AnswerQuestionCommand.ts  AnswerResult.ts
 │
 ├── presentation/
@@ -152,10 +188,10 @@ src/
 │   ├── inbound/linq/            LinqWebhookController.ts
 │   └── outbound/
 │       ├── accounting/          LedgerReport.ts            ← the source interface
-│       │                        QuarterlyBookAssembler.ts  ← the collector (§7)
+│       │                        MonthlyBookAssembler.ts  ← the collector (§7)
 │       │                        CachingAccountingRepository.ts
 │       ├── odoo/
-│       │   ├── OdooXmlRpcClient.ts  OdooMapper.ts
+│       │   ├── OdooJsonApiClient.ts  OdooMapper.ts
 │       │   ├── OdooAccountingRepository.ts
 │       │   ├── reports/         ← one file per catalogue entry (§4)
 │       │   └── fixtures/        FixtureBookRepository.ts   ← demo insurance
@@ -164,6 +200,7 @@ src/
 │
 └── composition/
     ├── container.ts             ← where the 15 reports get registered
+    ├── kickoff.ts               ← the monthly close-out trigger (§0) — no logic of its own
     └── server.ts
 ```
 
@@ -171,49 +208,77 @@ src/
 
 ---
 
-## 3. `Quarter` — the input that defines everything
+## 3. `Month` — the input that defines everything
 
 ```ts
-// domain/model/Quarter.ts — zero imports
-export class Quarter {
-  private constructor(readonly year: number, readonly index: QuarterIndex) {} // 1 | 2 | 3 | 4
+// domain/model/Month.ts — zero imports
+export class Month {
+  private constructor(readonly year: number, readonly index: MonthIndex) {} // 1…12
 
-  static of(year: number, index: QuarterIndex): Quarter;
-  static parse(text: string): Quarter | null;   // "2026-Q2", "Q2 2026", "q2"
-  static containing(date: Date): Quarter;
-  static lastCompleted(now: Date): Quarter;     // ← the default
+  static of(year: number, index: MonthIndex): Month;
+  static parse(text: string): Month | null;   // "2026-07", "July 2026", "july", "last month"
+  static containing(date: Date): Month;
+  static lastClosed(now: Date, settlingDays: number): Month;  // ← the default
 
-  period(): Period;          // 2026-04-01 → 2026-06-30
+  period(): Period;          // 2026-07-01 → 2026-07-31
   startsOn(): Date;
   endsOn(): Date;            // the as-of date for everything point-in-time
-  previous(): Quarter;       // comparatives
-  sameQuarterLastYear(): Quarter;
-  isClosed(now: Date): boolean;   // ← gates caching. See §11.
-  label(): string;           // "Q2 2026"
+  previous(): Month;                     // comparatives
+  sameMonthLastYear(): Month;
+  trailing(n: number): Period;           // ← n months back through endsOn(), for report 6
+  hasEnded(now: Date): boolean;
+  isSettled(now: Date, settlingDays: number): boolean;  // ← gates caching. See §11.
+  label(): string;           // "July 2026"
 }
 ```
 
-**`Quarter` is a domain type, not two ints passed around.** The moment `year` and `q` travel as loose
+**`Month` is a domain type, not two ints passed around.** The moment `year` and `m` travel as loose
 arguments, someone builds an off-by-one date range in an adapter and the P&L is quietly wrong by one
-day at each end. One class, one set of boundary tests, `endsOn()` used everywhere as the as-of date.
+day at each end — and month lengths make that likelier here than it was with quarters: February,
+30-day months and leap years are three ways to get `endsOn()` wrong. One class, one set of boundary
+tests (write them for Feb 2024, Feb 2026, and any 30-day month), `endsOn()` used everywhere as the
+as-of date.
 
-### How the quarter gets chosen
+### Ended vs settled
+
+```ts
+hasEnded(now)  → now > this.endsOn()
+isSettled(now, settlingDays) → now > addDays(this.endsOn(), settlingDays)
+```
+
+**Two predicates, because the calendar and the ledger disagree.** August 1st, the July books have
+*ended*; they have not *settled* — the last vendor bills and the bank rec land over the following
+week or so. `isSettled` is what gates caching forever ([§11](#11-rendering-and-caching)) and what
+`lastClosed` defaults to, so Tammy's monthly close-out doesn't go out on a half-posted ledger.
+
+`SETTLING_DAYS` is config (default 10) because it's a property of the client's bookkeeping, not of
+the calendar. A client whose books are clean on day 2 sets it to 2.
+
+### How the month gets chosen
 
 | Input | Resolves to |
 |---|---|
-| Message contains `Q2 2026`, `2026-Q2`, `Q2` | `Quarter.parse` — bare `Q2` means the most recent Q2 that has closed |
-| Message says nothing | `Quarter.lastCompleted(now)` |
-| Message names the current, unfinished quarter | Allowed, but the book is partial — a `BookGap` says so |
+| Message contains `July 2026`, `2026-07`, `July` | `Month.parse` — bare `July` means the most recent July that has ended |
+| Message says "last month", "this month" | `Month.parse` against `now` |
+| Message says nothing | `Month.lastClosed(now, SETTLING_DAYS)` |
+| Message names a month that ended but hasn't settled | Allowed — answered, with a "still settling" `BookGap` |
+| Message names the current, unfinished month | Allowed, but the book is partial — a `BookGap` says so |
 
-`Quarter.parse` is pure and lives in domain: *which period the client meant* is a product rule, not a
+`Month.parse` is pure and lives in domain: *which period the client meant* is a product rule, not a
 parsing detail. The inbound adapter calls it and puts the result on the command — it never invents a
 date range of its own.
 
-> ⚠️ **Fiscal vs calendar quarters.** Phase 1 assumes calendar quarters (Jan–Mar = Q1). Odoo
-> companies carry a fiscal year end (`res.company.fiscalyear_last_month`) that may not be December,
-> and if the client's is offset, every period boundary here is wrong. **Check it on day one** —
-> `CompanyProfile` (report 14) reads it precisely so this fails loudly rather than silently. The fix
-> is a `FiscalCalendar` passed into `Quarter`, roughly 20 lines.
+> **Fiscal calendars mostly stop mattering.** This is a quiet win of monthly over quarterly: fiscal
+> years shift which *quarter* a date belongs to, but essentially every fiscal calendar in Odoo still
+> runs on calendar months, so `startsOn()` / `endsOn()` are safe. `CompanyProfile` (report 14) still
+> reads `res.company.fiscalyear_last_month` — but Phase 1 only needs it to *label* year-to-date
+> context correctly, not to get period boundaries right. **Check it on day one anyway**; it's one
+> field and it tells you whether "FY26" in a reply means what the owner thinks it means.
+
+> ⚠️ **The 4-4-5 exception.** Retail and some manufacturing clients close on 4-4-5 or 13-period
+> calendars, where "month" boundaries aren't calendar months at all. Odoo doesn't model this natively
+> and neither does Phase 1. If the client uses one, every number here is off by days at each end —
+> the fix is a `FiscalCalendar` passed into `Month`, roughly 20 lines. Ask before you demo.
 
 ---
 
@@ -231,44 +296,63 @@ reconciliation engine.
 
 | # | Report | Odoo domain | Rows | Answers |
 |---|---|---|---|---|
-| 1 | **CustomerInvoices** | `out_invoice`, `out_refund`, posted, `invoice_date` in quarter | ~120 | What we billed, to whom, when |
-| 2 | **VendorBills** | `in_invoice`, `in_refund`, posted, `invoice_date` in quarter | ~120 | What we were billed |
-| 3 | **OpenReceivables** | `out_*`, posted, `payment_state not in (paid, reversed)`, `invoice_date <= quarterEnd` | ~40 | Who owed us at quarter end — **no lower date bound** |
+| 1 | **CustomerInvoices** | `out_invoice`, `out_refund`, posted, `invoice_date` in month | ~40 | What we billed, to whom, when |
+| 2 | **VendorBills** | `in_invoice`, `in_refund`, posted, `invoice_date` in month | ~40 | What we were billed |
+| 3 | **OpenReceivables** | `out_*`, posted, `payment_state not in (paid, reversed)`, `invoice_date <= monthEnd` | ~40 | Who owed us at month end — **no lower date bound** |
 | 4 | **OpenPayables** | `in_*`, same shape | ~30 | What we owed |
 
-**Reports 3 and 4 have no start date, and that's the point.** A quarter filter silently drops the
+**Reports 3 and 4 have no start date, and that's the point.** A month filter silently drops the
 invoice issued 5 months ago that's still unpaid — exactly the one the founder is asking about. AR and
-AP are each read twice: what *happened* in the quarter (1–2) and what was still *open* at the end of
+AP are each read twice: what *happened* in the month (1–2) and what was still *open* at the end of
 it (3–4). Skipping this is the most plausible way Phase 1 gives a confidently incomplete answer.
 
 Aging buckets are **not** a query — `AgingAnalyzer` derives them in domain from reports 3 and 4,
-using `quarter.endsOn()` as "now". Pure, instant, testable.
+using `month.endsOn()` as "now". Pure, instant, testable.
 
 ### B. Aggregates — `read_group` on `account.move.line`
 
-Cash and the GL genuinely live at the line level, where a quarter is thousands of rows. `read_group`
-makes Odoo sum server-side and hand back tens.
+Cash and the GL genuinely live at the line level, where even a month is hundreds to thousands of
+rows. `read_group` makes Odoo sum server-side and hand back tens.
 
 | # | Report | Grouped by | Rows | Answers |
 |---|---|---|---|---|
-| 5 | **ProfitAndLoss** | `account_type` × `date:month`, income + expense accounts, quarter | ~12 | Revenue, COGS, opex, net — the headline |
-| 6 | **PriorQuarterPnL** | same, `quarter.previous()` | ~12 | "Better or worse than last quarter?" |
-| 7 | **TrialBalance** | `account_id`, all accounts, quarter movement | ~80 | The general ledger, at usable granularity |
-| 8 | **BalanceSheet** | `account_type`, asset/liability/equity, **cumulative to quarter end** | ~10 | Position, not flow |
-| 9 | **CashPosition** | `account_id`, `account_type = asset_cash`, **cumulative to quarter end** | ~5 | Bank balance per account |
-| 10 | **CashMovements** | `date:month` × `journal_id` on cash accounts, plus the largest individual lines | ~10 + ≤300 | Money actually in and out |
-| 11 | **TaxSummary** | `tax_line_id`, lines where `tax_line_id != false`, quarter | ~10 | **VAT/sales tax to file for the quarter** |
-| 12 | **PartnerBalances** | `partner_id`, receivable + payable accounts, to quarter end | ~50 | Who owes what, both directions |
-| 13 | **PartnerRevenue** | `partner_id`, income accounts, quarter | ~50 | Top customers, concentration risk |
+| 5 | **ProfitAndLoss** | `account_type`, income + expense accounts, month | ~8 | Revenue, COGS, opex, net — the headline |
+| 6 | **TrailingMonths** | `account_type` × `date:month`, **trailing 12 months to month end** | ~90 | Vs last month · vs same month last year · trend · burn |
+| 7 | **TrialBalance** | `account_id`, all accounts, month movement | ~80 | The general ledger, at usable granularity |
+| 8 | **BalanceSheet** | `account_type`, asset/liability/equity, **cumulative to month end** | ~10 | Position, not flow |
+| 9 | **CashPosition** | `account_id`, `account_type = asset_cash`, **cumulative to month end** | ~5 | Bank balance per account |
+| 10 | **CashMovements** | `journal_id` × `date:week` on cash accounts, plus the largest individual lines | ~15 + ≤200 | Money actually in and out |
+| 11 | **TaxSummary** | `tax_line_id`, lines where `tax_line_id != false`, month | ~10 | VAT/sales tax **accrued** in the month |
+| 12 | **PartnerBalances** | `partner_id`, receivable + payable accounts, to month end | ~50 | Who owes what, both directions |
+| 13 | **PartnerRevenue** | `partner_id`, income accounts, month | ~40 | Top customers, concentration risk |
 
-**Report 11 is why quarters are the right unit.** A quarter is a *filing* period in most
-jurisdictions — VAT returns are quarterly. "What do I owe the tax office for Q2?" is a question a
-fractional CFO is asked constantly and a bookkeeper charges for. It falls straight out of this
-catalogue.
+**Report 6 is the one that changes with this cadence, and it's the most valuable query in the
+catalogue.** Quarterly, "prior period" was one comparison; monthly, a single prior month is noise —
+one late invoice or a 28-day February moves it more than the business did. So report 6 stops being
+"last month" and becomes a **trailing twelve months grouped by month**, in the same single
+`read_group`. Ninety rows, one round trip, and it answers:
 
-**Reports 8, 9 and 12 are cumulative to quarter end; the rest are quarter movement.** Balances are
-stock, P&L is flow. Applying a `date >=` filter to a balance produces a plausible-looking wrong
-number, which is the worst kind.
+- **Month over month** — is July worse than June?
+- **Same month last year** — or is July always slow?
+- **Trend** — three months of creeping payroll reads as a line, not a blip.
+- **Burn** — average net over the trailing months, which is what makes runway a pure calculation
+  over the book instead of a new query ([§5](#5-the-domain-model)).
+
+Every one of those was expensive or impossible in the quarterly design. This is the payoff for the
+shorter period, and it costs one query.
+
+**On report 11 and filing periods — say the honest thing.** A month is an *accrual* period, not
+usually a *filing* period: VAT returns are quarterly in much of Europe, monthly in some regimes and
+above some thresholds, and US sales tax varies by state and volume. So report 11 answers "what tax
+did July accrue", **not** "what do I owe the tax office" — and the reply must not blur them. A
+filing-period total is three cached books added together, which the owner can get by asking about
+each month, and which Phase 1.5 makes one question via a `TaxPeriod` that spans months. Do not let
+the model present a monthly accrual as a return figure; that's the kind of wrong that costs
+a client money rather than face.
+
+**Reports 8, 9 and 12 are cumulative to month end; 5, 7, 11 and 13 are month movement; 6 is a
+series.** Balances are stock, P&L is flow. Applying a `date >=` filter to a balance produces a
+plausible-looking wrong number, which is the worst kind.
 
 ### C. Reference — stable, cached, prompt-prefix material
 
@@ -286,10 +370,11 @@ out as cacheable prefix material.
 | Not fetched | Why |
 |---|---|
 | `move_type = 'entry'` as documents | Depreciation, payroll accruals, tax closings. Already in the trial balance as numbers; as documents they're noise that invites the model to editorialise on bookkeeping. |
-| Raw `account.move.line` dumps | 1,500–4,000 rows a quarter to say what 80 grouped rows say. |
+| Raw `account.move.line` dumps | 500–1,500 rows a month to say what 80 grouped rows say. |
 | `account.payment` records | Cash movements (10) already cover money in/out. Adds a second, subtly different truth. |
 | Analytic accounts / projects | Not every client uses them. Phase 2, behind a capability check. |
-| Anything dated after quarter end | Phase 1 answers about a quarter. See [§0](#0-scope). |
+| Anything dated after month end | Phase 1 answers about a month. See [§0](#0-scope). |
+| A second month's documents | Report 6 gives twelve months of *aggregates* for comparison. Twelve months of *invoices* is the token bill of the whole design for a question nobody asked. |
 
 ### One report, in full
 
@@ -302,7 +387,7 @@ export class TaxSummaryReport implements LedgerReport<"tax"> {
   readonly tier = Tier.Standard;
 
   constructor(
-    private readonly rpc: OdooXmlRpcClient,
+    private readonly rpc: OdooJsonApiClient,
     private readonly mapper: OdooMapper,
   ) {}
 
@@ -340,6 +425,15 @@ export class TaxSummaryReport implements LedgerReport<"tax"> {
   both AR and revenue.
 - **Multi-currency:** restrict to company currency, or carry currency through and refuse to sum
   across it. `Money` forces the decision — that's what it's for.
+- **A monthly P&L is far more accrual-sensitive than a quarterly one.** An annual insurance premium
+  or a tooling renewal booked whole into July makes July look like a disaster, and in a quarter it
+  would have averaged out. Nothing in the data marks it as one-off — so report 6's twelve-month
+  series is the only defence, and the prompt must tell the model to check a bad month against the
+  same line in prior months before calling it a problem. **This is the failure mode of monthly
+  reporting**, and it's a copy-and-prompt fix, not a query fix.
+- **`read_group` on `date:month` returns Odoo's own label strings** (`"July 2026"`) alongside the
+  range, not an ISO key. Map them to `Month` in `OdooMapper` by the range, never by parsing the
+  label — the label is localised and will change under a different `res.users` language.
 
 > ⚠️ Odoo external API access varies by version and between Online and self-hosted
 > ([tech_stack.md §5](./tech_stack.md)). Verify `search_read` **and** `read_group` against the real
@@ -361,14 +455,16 @@ classDiagram
         +minus(Money) Money
     }
 
-    class Quarter {
+    class Month {
         <<value object>>
         +year: number
-        +index: 1..4
+        +index: 1..12
         +period() Period
         +endsOn() Date
-        +previous() Quarter
-        +isClosed(now) boolean
+        +previous() Month
+        +sameMonthLastYear() Month
+        +hasEnded(now) boolean
+        +isSettled(now, days) boolean
     }
 
     class Invoice {
@@ -394,11 +490,21 @@ classDiagram
 
     class ProfitAndLoss {
         <<value object>>
-        +byMonth: List~MonthlyTotal~
+        +byType: List~AccountTypeTotal~
         +revenue() Money
         +expenses() Money
         +net() Money
         +grossMargin() number
+    }
+
+    class TrailingMonths {
+        <<value object>>
+        +months: List~MonthlyTotal~
+        +at(Month) ProfitAndLoss
+        +priorMonth() ProfitAndLoss
+        +sameMonthLastYear() ProfitAndLoss
+        +averageNet(n) Money
+        +averageBurn(n) Money
     }
 
     class CashPosition {
@@ -428,16 +534,16 @@ classDiagram
         +reason: string
     }
 
-    class QuarterlyBook {
+    class MonthlyBook {
         <<aggregate>>
         +clientId: ClientId
-        +quarter: Quarter
+        +month: Month
         +invoicesIssued: InvoiceLedger
         +billsReceived: InvoiceLedger
         +openReceivables: InvoiceLedger
         +openPayables: InvoiceLedger
         +pnl: ProfitAndLoss
-        +priorPnl: ProfitAndLoss
+        +trailing: TrailingMonths
         +trialBalance: TrialBalance
         +balanceSheet: BalanceSheet
         +cash: CashPosition
@@ -460,19 +566,20 @@ classDiagram
         +askedAt: Date
     }
 
-    QuarterlyBook *-- InvoiceLedger
-    QuarterlyBook *-- ProfitAndLoss
-    QuarterlyBook *-- CashPosition
-    QuarterlyBook *-- TaxSummary
-    QuarterlyBook *-- PartnerBalances
-    QuarterlyBook *-- BookGap
-    QuarterlyBook ..> Quarter
+    MonthlyBook *-- InvoiceLedger
+    MonthlyBook *-- ProfitAndLoss
+    MonthlyBook *-- TrailingMonths
+    MonthlyBook *-- CashPosition
+    MonthlyBook *-- TaxSummary
+    MonthlyBook *-- PartnerBalances
+    MonthlyBook *-- BookGap
+    MonthlyBook ..> Month
     InvoiceLedger *-- Invoice
     Invoice ..> Money
-    GroundedAnswer ..> QuarterlyBook
+    GroundedAnswer ..> MonthlyBook
 ```
 
-### Four decisions worth defending
+### Five decisions worth defending
 
 **`Money` is never a `number`.** Integer minor units plus a currency. Cutting this is the one
 shortcut that reliably bites during a demo.
@@ -482,18 +589,18 @@ shortcut that reliably bites during a demo.
 `CashPosition` speaks `Money` and knows nothing about Odoo, which is what lets `AgingAnalyzer` and
 every future domain service consume the book directly.
 
-**`QuarterlyBook` is a value object, not a service.** It's inert — a snapshot of a closed period with
+**`MonthlyBook` is a value object, not a service.** It's inert — a snapshot of a closed period with
 no I/O and no lazy loading. That's what makes it cacheable, serialisable to a fixture, and trivial to
 hand a test.
 
-**`QuarterlyBook` is the unit of grounding.** `AnswerValidator` doesn't chase per-figure provenance,
+**`MonthlyBook` is the unit of grounding.** `AnswerValidator` doesn't chase per-figure provenance,
 because **the entire evidence set is the thing we put in the prompt**:
 
 ```ts
 // domain/services/AnswerValidator.ts — zero imports, µs to test
 export class AnswerValidator {
-  ground(draft: AnswerDraft, book: QuarterlyBook, now: Date): GroundedAnswer {
-    if (!book.isUsable()) throw new IncompleteBookError(book.clientId, book.quarter, book.gaps);
+  ground(draft: AnswerDraft, book: MonthlyBook, now: Date): GroundedAnswer {
+    if (!book.isUsable()) throw new IncompleteBookError(book.clientId, book.month, book.gaps);
 
     const known = book.knownInvoiceIds();
     const invented = draft.citedInvoiceIds.filter((id) => !known.has(id.value));
@@ -507,6 +614,33 @@ export class AnswerValidator {
 Weaker than the full design's per-figure grounding, and it's the honest Phase 1 trade: **we can prove
 the answer only saw real ledger data, not yet that every digit is traceable.**
 
+**Runway is promoted into Phase 1, because monthly makes it free.** The quarterly design pushed
+runway to Phase 2 ([§15](#15-seams--what-phase-2-plugs-into)) — with one prior quarter there was
+nothing honest to divide by. Report 6 changes that: cash at month end and twelve months of net are
+both already in the book, so runway is a **pure function over data we hold**, no new query, no
+forecast:
+
+```ts
+// domain/services/RunwayEstimator.ts — zero imports
+export class RunwayEstimator {
+  estimate(book: MonthlyBook, over = 3): Runway | null {
+    const burn = book.trailing.averageBurn(over);   // null if net is positive
+    if (burn === null || burn.isZero()) return null; // profitable, or not enough history
+    return Runway.months(book.cash.total().dividedBy(burn), book.month.endsOn(), over);
+  }
+}
+```
+
+Three rules keep it defensible: it returns `null` rather than a number when the client is profitable
+or has fewer than `over` months of history; it carries its own `asOf` and window so the reply can
+say *"~7 months at the last 3 months' burn, as of 31 Jul"*; and it is **backward-looking
+arithmetic, not a forecast** — no assumptions about pipeline, no scenarios. That distinction is what
+keeps it inside the Phase 1 line while [§15](#15-seams--what-phase-2-plugs-into) still owns
+forecasting.
+
+This is what lets Tammy's monthly close-out lead with cash *and* runway
+([imessage_flow_phase1.md](./imessage_flow_phase1.md) beat 1) without inventing anything.
+
 ### `BookGap` and tiers
 
 Fifteen queries mean fourteen ways to be *partly* successful. A blanket failure is the wrong
@@ -515,11 +649,19 @@ response to "the tax report timed out" when the question was about AR.
 | Tier | Reports | If it fails |
 |---|---|---|
 | **Required** | P&L, CashPosition, OpenReceivables, CompanyProfile | `isUsable()` false — refuse to answer |
-| **Standard** | Invoices, Bills, OpenPayables, TrialBalance, Tax, PartnerBalances | Answer, with the gap stated |
-| **Optional** | PriorQuarterPnL, BalanceSheet, CashMovements, PartnerRevenue, ChartOfAccounts | Answer, gap noted quietly |
+| **Standard** | **TrailingMonths**, Invoices, Bills, OpenPayables, TrialBalance, Tax, PartnerBalances | Answer, with the gap stated |
+| **Optional** | BalanceSheet, CashMovements, PartnerRevenue, ChartOfAccounts | Answer, gap noted quietly |
+
+**TrailingMonths sits in Standard, not Optional** — the tier its quarterly predecessor had. Without
+it there is no comparison and no runway, so the answer is materially thinner and the owner has to be
+told: *"I couldn't pull the last twelve months, so this is July on its own."* It isn't Required
+because "what did July do?" is still a real, complete answer without it.
 
 Gaps are **rendered into the prompt** so the model qualifies its answer, and surfaced in the reply
 footer. Silence about missing data is how a CFO product loses trust.
+
+One gap is not a failure at all: a month that has ended but not settled ([§3](#ended-vs-settled))
+gets a `BookGap` of its own, so both the prompt and the footer can say the books are still moving.
 
 ---
 
@@ -531,7 +673,7 @@ classDiagram
 
     class AccountingRepository {
         <<interface>>
-        +getQuarterlyBook(ClientId, Quarter) QuarterlyBook
+        +getMonthlyBook(ClientId, Month) MonthlyBook
     }
     class ReasoningEngine {
         <<interface>>
@@ -550,7 +692,7 @@ classDiagram
     class CachingAccountingRepository
     class OdooAccountingRepository
     class FixtureBookRepository
-    class QuarterlyBookAssembler
+    class MonthlyBookAssembler
     class ClaudeReasoningEngine
     class LinqConversationChannel
     class SystemClock
@@ -559,7 +701,7 @@ classDiagram
     AccountingRepository <|.. OdooAccountingRepository
     AccountingRepository <|.. FixtureBookRepository
     CachingAccountingRepository o-- OdooAccountingRepository : delegates
-    OdooAccountingRepository o-- QuarterlyBookAssembler : fans out
+    OdooAccountingRepository o-- MonthlyBookAssembler : fans out
     ReasoningEngine <|.. ClaudeReasoningEngine
     ConversationChannel <|.. LinqConversationChannel
     Clock <|.. SystemClock
@@ -568,7 +710,7 @@ classDiagram
 ```ts
 // application/ports/driven/AccountingRepository.ts
 export interface AccountingRepository {
-  getQuarterlyBook(clientId: ClientId, quarter: Quarter): Promise<QuarterlyBook>;
+  getMonthlyBook(clientId: ClientId, month: Month): Promise<MonthlyBook>;
 }
 ```
 
@@ -586,11 +728,11 @@ all. **Don't, not in Phase 1.**
 |---|---|---|
 | Use case | Orchestrates 14 calls, owns concurrency and partial-failure policy | Calls one thing |
 | Parallelism | Leaks into `application/` | Stays in the adapter, where transport belongs |
-| Caching | Fifteen cache keys | One key: `(clientId, quarter)` — [§11](#11-rendering-and-caching) |
+| Caching | Fifteen cache keys | One key: `(clientId, month)` — [§11](#11-rendering-and-caching) |
 | Fixtures | Fake fifteen methods | Fake one, or load one JSON file |
 
 A port should be phrased at the granularity the use case needs, and Phase 1 needs exactly one thing:
-*the client's books for a quarter*. That **is** a domain-level request. Whether it costs one round
+*the client's books for a month*. That **is** a domain-level request. Whether it costs one round
 trip or fifteen is a fact about Odoo, and facts about Odoo live in the Odoo adapter.
 
 The fine-grained calls still exist — as the fifteen `LedgerReport` classes. Phase 2 promotes the
@@ -605,7 +747,8 @@ export interface ReasoningEngine {
 
 export interface ReasoningRequest {
   systemPrompt: string;  // stable → cache_control breakpoint after this
-  book: QuarterlyBook;   // the adapter renders it; the port speaks domain
+  book: MonthlyBook;     // the adapter renders it; the port speaks domain
+  runway: Runway | null; // derived in domain, never by the model — see §5
   question: string;
   effort: "low" | "medium" | "high";
 }
@@ -629,9 +772,9 @@ about what any of them mean.
 
 ```mermaid
 flowchart TB
-    Q["getQuarterlyBook(clientId, 2026-Q2)"] --> AS["QuarterlyBookAssembler"]
+    Q["getMonthlyBook(clientId, 2026-07)"] --> AS["MonthlyBookAssembler"]
 
-    AS --> BR["BookRequest<br/>clientId · quarter · period · asOf = quarter end"]
+    AS --> BR["BookRequest<br/>clientId · month · period · asOf = month end"]
 
     subgraph REPORTS["15 LedgerReports — parallel, capped at 6 in flight"]
         direction LR
@@ -643,7 +786,7 @@ flowchart TB
     BR --> REPORTS
     REPORTS -->|"fulfilled"| PARTS["BookParts"]
     REPORTS -->|"rejected / timed out"| GAPS["BookGap[]"]
-    PARTS --> BOOK["QuarterlyBook"]
+    PARTS --> BOOK["MonthlyBook"]
     GAPS --> BOOK
 
     style AS fill:#1e3a5f,stroke:#4a7fb5,color:#fff
@@ -663,9 +806,9 @@ export interface LedgerReport<K extends BookPart> {
 
 export interface BookRequest {
   clientId: ClientId;
-  quarter: Quarter;
-  period: Period; // quarter.period(), precomputed once
-  asOf: Date;     // quarter.endsOn() — every point-in-time report uses this
+  month: Month;
+  period: Period; // month.period(), precomputed once
+  asOf: Date;     // month.endsOn() — every point-in-time report uses this
 }
 ```
 
@@ -676,20 +819,20 @@ export interface BookRequest {
 ### The assembler
 
 ```ts
-// adapters/outbound/accounting/QuarterlyBookAssembler.ts
-export class QuarterlyBookAssembler {
+// adapters/outbound/accounting/MonthlyBookAssembler.ts
+export class MonthlyBookAssembler {
   constructor(
     private readonly reports: readonly LedgerReport<BookPart>[],
     private readonly clock: Clock,
     private readonly limits = { concurrency: 6, perReportMs: 8_000 },
   ) {}
 
-  async assemble(clientId: ClientId, quarter: Quarter): Promise<QuarterlyBook> {
+  async assemble(clientId: ClientId, month: Month): Promise<MonthlyBook> {
     const request: BookRequest = {
       clientId,
-      quarter,
-      period: quarter.period(),
-      asOf: quarter.endsOn(),
+      month,
+      period: month.period(),
+      asOf: month.endsOn(),
     };
 
     const parts: Partial<BookParts> = {};
@@ -704,7 +847,7 @@ export class QuarterlyBookAssembler {
       }
     });
 
-    return QuarterlyBook.assemble(clientId, quarter, parts, gaps, this.clock.now());
+    return MonthlyBook.assemble(clientId, month, parts, gaps, this.clock.now());
   }
 }
 ```
@@ -715,12 +858,12 @@ right: **you could add a report about inventory and not touch this file.**
 
 Three properties worth naming:
 
-- **Concurrency is capped at 6.** XML-RPC has no batching — fifteen reports are fifteen HTTP
-  requests, and firing all of them at a small Odoo instance is how you discover its worker pool. Six
-  in flight completes the catalogue in about two round trips.
+- **Concurrency is capped at 6.** The JSON-2 API is one model call per request — fifteen reports are
+  fifteen HTTP requests, and firing all of them at a small Odoo instance is how you discover its
+  worker pool. Six in flight completes the catalogue in about two round trips.
 - **Per-report timeout, not a global one.** One slow report shouldn't eat the budget that the other
   fourteen need. A timeout is just another gap.
-- **`QuarterlyBook.assemble` is the domain factory** — it decides what a missing Required part means.
+- **`MonthlyBook.assemble` is the domain factory** — it decides what a missing Required part means.
   The assembler collects; the domain judges.
 
 ---
@@ -728,13 +871,14 @@ Three properties worth naming:
 ## 8. The use case
 
 ```ts
-// application/usecases/AnswerQuarterlyQuestion.ts
-export class AnswerQuarterlyQuestion {
+// application/usecases/AnswerMonthlyQuestion.ts
+export class AnswerMonthlyQuestion {
   constructor(
     private readonly clients: ClientRegistry,
     private readonly accounting: AccountingRepository,
     private readonly reasoner: ReasoningEngine,
     private readonly validator: AnswerValidator,
+    private readonly runway: RunwayEstimator,
     private readonly clock: Clock,
   ) {}
 
@@ -742,16 +886,20 @@ export class AnswerQuarterlyQuestion {
     const now = this.clock.now();
     const client = this.clients.require(cmd.clientId);
 
-    // The adapter parsed a quarter out of the message, or fell back to the last closed one.
-    const quarter = cmd.quarter ?? Quarter.lastCompleted(now);
+    // The adapter parsed a month out of the message, or fell back to the last settled one.
+    const month = cmd.month ?? Month.lastClosed(now, this.settlingDays);
 
     // One call. Fifteen reports happen behind it — that's the adapter's business.
-    const book = await this.accounting.getQuarterlyBook(client.id, quarter);
+    const book = await this.accounting.getMonthlyBook(client.id, month);
+
+    // Pure arithmetic over the book — no query, no forecast. Null when it isn't answerable.
+    const runway = this.runway.estimate(book);
 
     // Retrieve first, reason once. No tool loop in Phase 1 — see §6.
     const draft = await this.reasoner.answer({
       systemPrompt: CFO_SYSTEM_PROMPT,
       book,
+      runway,
       question: cmd.question,
       effort: "high",
     });
@@ -759,13 +907,18 @@ export class AnswerQuarterlyQuestion {
     // Guardrail: the answer may only reference documents we actually handed it.
     const answer = this.validator.ground(draft, book, now);
 
-    return AnswerResult.from(answer, book);
+    return AnswerResult.from(answer, book, runway);
   }
 }
 ```
 
-Four statements of substance. **No `axios.`, no `anthropic.`, no XML-RPC, no `Promise.all`** — it
+Five statements of substance. **No `axios.`, no `anthropic.`, no HTTP, no `Promise.all`** — it
 runs in a unit test in milliseconds against in-memory fakes.
+
+The runway line is the only addition the monthly cadence makes here, and note what it *isn't*: not a
+port, not a call, not a branch. It's a pure domain service over data the book already holds
+([§5](#5-the-domain-model)), which is why it can sit in the use case without costing a round trip or
+a test double.
 
 Note what *isn't* here: no retry, no timeout, no concurrency cap, no partial-failure branch. Those
 are real concerns and they all belong to the assembler, the only component that knows there are
@@ -784,22 +937,29 @@ export class IMessageAnswerPresenter implements Presenter<AnswerResult, MessageV
   constructor(private readonly money: MoneyFormatter) {}
 
   present(result: AnswerResult): MessageViewModel {
-    const { text, quarterLabel, asOf, documentCount, gaps } = result;
+    const { text, monthLabel, asOf, documentCount, gaps, settling } = result;
     const lines = [
       text,
       "",
-      `_${quarterLabel} · ${documentCount} documents · as of ${this.money.formatDate(asOf)}_`,
+      `_${monthLabel} · ${documentCount} documents · as of ${this.money.formatDate(asOf)}_`,
     ];
+    if (settling) lines.push("_books for this month may still be settling_");
     if (gaps.length > 0) lines.push(`_⚠️ couldn't read: ${gaps.join(", ")}_`);
     return { text: lines.join("\n") };
   }
 }
 ```
 
-**The `as of` date is not decoration.** Phase 1 answers about a closed quarter
+**The `as of` date is not decoration.** Phase 1 answers about a closed month
 ([§0](#0-scope)), so every balance in that reply is historical. Printing the as-of date is the
 difference between a defensible answer and a misleading one — and it's the line that makes the
-quarter-scoping read as a deliberate choice rather than a limitation.
+month-scoping read as a deliberate choice rather than a limitation.
+
+The `settling` line is the monthly cadence's version of the same honesty: with quarters, nobody
+asked about a period that ended yesterday. With months they will, and "as of 31 Jul" alone doesn't
+tell them that three vendor bills for July hadn't been entered yet. One boolean from
+`month.isSettled` ([§3](#ended-vs-settled)), one line of copy, and the reply stops overstating what
+it knows.
 
 Note what the presenter does **not** do: no "if outstanding is high, warn them," and no decision
 about whether a gap matters. It renders `result.gaps`; `book.isUsable()` already decided whether
@@ -812,9 +972,9 @@ answering was defensible at all.
 | #   | Type family        | Created by      | Consumed by      | Phase 1 example                                          |
 | --- | ------------------ | --------------- | ---------------- | -------------------------------------------------------- |
 | 1   | **Vendor payload** | External API    | Its adapter only | `LinqInboundWebhook`, `OdooMoveRecord`, `read_group` rows |
-| 2   | **Command**        | Inbound adapter | Use case         | `AnswerQuestionCommand { clientId, question, quarter? }`  |
-| 3   | **Entity / VO**    | Domain, mappers | Everything inner | `QuarterlyBook`, `Quarter`, `Invoice`, `Money`            |
-| 4   | **Result DTO**     | Use case        | Presenter        | `AnswerResult { text, quarterLabel, asOf, documentCount, gaps }` |
+| 2   | **Command**        | Inbound adapter | Use case         | `AnswerQuestionCommand { clientId, question, month? }`  |
+| 3   | **Entity / VO**    | Domain, mappers | Everything inner | `MonthlyBook`, `Month`, `Invoice`, `Money`            |
+| 4   | **Result DTO**     | Use case        | Presenter        | `AnswerResult { text, monthLabel, asOf, documentCount, gaps, settling }` |
 | 5   | **ViewModel**      | Presenter       | Inbound adapter  | `MessageViewModel { text }`                               |
 
 **No vendor type past hop one.**
@@ -824,25 +984,26 @@ sequenceDiagram
     autonumber
     participant C as Client — iMessage
     participant W as LinqWebhookController<br/>inbound adapter
-    participant U as AnswerQuarterlyQuestion<br/>use case
+    participant U as AnswerMonthlyQuestion<br/>use case
     participant K as CachingAccountingRepository<br/>outbound adapter
-    participant A as QuarterlyBookAssembler<br/>outbound adapter
-    participant D as Odoo<br/>XML-RPC
+    participant A as MonthlyBookAssembler<br/>outbound adapter
+    participant D as Odoo<br/>JSON-2 API
     participant R as ClaudeReasoningEngine<br/>outbound adapter
     participant V as AnswerValidator<br/>domain
+    participant V2 as RunwayEstimator<br/>domain
     participant P as IMessageAnswerPresenter<br/>presentation
     participant L as LinqConversationChannel<br/>outbound adapter
 
-    C->>W: "How much VAT do I owe for Q2, and who still hasn't paid me?"
-    Note over W: LinqInboundWebhook → AnswerQuestionCommand<br/>Quarter.parse("Q2") → 2026-Q2
+    C->>W: "How did July compare with June, and who still hasn't paid me?"
+    Note over W: LinqInboundWebhook → AnswerQuestionCommand<br/>Month.parse("July") → 2026-07
     W->>L: setTyping(phone, true)
     W->>U: execute(command)
-    U->>K: getQuarterlyBook(clientId, 2026-Q2)
+    U->>K: getMonthlyBook(clientId, 2026-07)
 
-    alt quarter closed and cached
-        K-->>U: QuarterlyBook — zero Odoo calls
+    alt month settled and cached
+        K-->>U: MonthlyBook — zero Odoo calls
     else cold
-        K->>A: assemble(clientId, 2026-Q2)
+        K->>A: assemble(clientId, 2026-07)
         par 15 reports, 6 in flight
             A->>D: search_read — documents (1–4)
             A->>D: read_group — aggregates (5–13)
@@ -850,13 +1011,15 @@ sequenceDiagram
         end
         D-->>A: rows
         Note over A: OdooMapper → domain types<br/>failures become BookGap, not exceptions
-        A-->>K: QuarterlyBook
-        Note over K: closed quarter → cache indefinitely
-        K-->>U: QuarterlyBook
+        A-->>K: MonthlyBook
+        Note over K: settled month → cache indefinitely
+        K-->>U: MonthlyBook
     end
 
-    U->>R: answer({ systemPrompt, book, question })
-    Note over R: BookRenderer → compact tables<br/>cache_control after the stable prefix
+    U->>V2: estimate(book) — pure, no I/O
+    V2-->>U: Runway or null
+    U->>R: answer({ systemPrompt, book, runway, question })
+    Note over R: BookRenderer → compact tables, trailing 12m<br/>cache_control after the stable prefix
     R-->>U: AnswerDraft — text + citedInvoiceIds
     U->>V: ground(draft, book, now)
     V-->>U: GroundedAnswer
@@ -864,7 +1027,7 @@ sequenceDiagram
     W->>P: present(AnswerResult)
     P-->>W: MessageViewModel
     W->>L: sendText(phone, viewModel.text)
-    L->>C: "VAT payable for Q2 is €4,180. Three customers owe €18,400…"
+    L->>C: "July net was €6,200, down 18% on June — payroll was flat,<br/>the gap is one €4,100 tooling renewal. Three customers owe €18,400…"
 ```
 
 ### The mapper is the boundary guard
@@ -899,19 +1062,19 @@ export class OdooMapper {
 
 ## 11. Rendering and caching
 
-### Two cache layers, both unlocked by closed quarters
+### Two cache layers, both unlocked by settled months
 
 ```ts
 // adapters/outbound/accounting/CachingAccountingRepository.ts
-async getQuarterlyBook(clientId: ClientId, quarter: Quarter): Promise<QuarterlyBook> {
-  const key = `${clientId.value}:${quarter.label()}`;
+async getMonthlyBook(clientId: ClientId, month: Month): Promise<MonthlyBook> {
+  const key = `${clientId.value}:${month.label()}`;
   const cached = this.store.get(key);
   if (cached) return cached;
 
-  const book = await this.inner.getQuarterlyBook(clientId, quarter);
+  const book = await this.inner.getMonthlyBook(clientId, month);
 
-  // A closed quarter is immutable. An open one is not.
-  if (quarter.isClosed(this.clock.now()) && book.gaps.length === 0) {
+  // A settled month is immutable. A month that merely ended is not — see §3.
+  if (month.isSettled(this.clock.now(), this.settlingDays) && book.gaps.length === 0) {
     this.store.set(key, book);                        // no TTL needed
   } else {
     this.store.set(key, book, { ttlMs: 5 * 60_000 });
@@ -920,19 +1083,28 @@ async getQuarterlyBook(clientId: ClientId, quarter: Quarter): Promise<QuarterlyB
 }
 ```
 
-1. **Book cache** — skip all fifteen Odoo queries for a quarter already assembled.
+1. **Book cache** — skip all fifteen Odoo queries for a month already assembled.
 2. **Prompt cache** — the rendered book is a stable prefix, so a `cache_control` breakpoint after it
    means follow-up questions read it at ~0.1× input price
    ([tech_stack.md §4](./tech_stack.md)).
 
-**Together, the second question about a quarter costs no Odoo calls and a fraction of the tokens.**
+**Together, the second question about a month costs no Odoo calls and a fraction of the tokens.**
 That is a demo where the first answer takes four seconds and every follow-up takes one — which reads
 as a much better product than it is.
 
-> Caveat worth one line of code: a closed quarter *can* change if someone posts a backdated entry.
-> If that matters, validate the cache with a cheap `search_count` of `account.move` where
-> `write_date > book.assembledAt`. Phase 1 can also just accept a stale book for the length of a
-> demo — but know which you chose.
+**Monthly makes the cache work harder, in both directions.** More periods means more keys and a
+lower hit rate on the first question about each; but a monthly cadence means the *same* month gets
+asked about repeatedly in the days after Tammy's close-out, which is exactly when the cache is warm.
+Twelve books a year per client is nothing to hold in memory — a book is tens of KB — so `InMemoryStore`
+is still the right call in Phase 1, and there is no eviction policy to get wrong.
+
+> ⚠️ **The one that will actually bite: report 6 spans twelve months, so it can go stale even when
+> the target month can't.** A backdated entry posted into May changes the trailing series inside
+> July's book without touching July. Cache-forever is therefore a claim about the *whole window*,
+> not just the month. Cheapest guard, one query: `search_count` on `account.move` where
+> `write_date > book.assembledAt` and `date >= month.trailing(12).from`. For a demo, accepting the
+> stale book is fine — but know which you chose, and note that this is strictly more exposure than
+> the quarterly design had.
 
 ### Render order in the prompt
 
@@ -941,17 +1113,23 @@ as a much better product than it is.
 | Position | Content | Why |
 |---|---|---|
 | 1 | Company profile, chart of accounts | Stable across every client request → **cache breakpoint here** |
-| 2 | Headline: P&L, prior-quarter P&L, cash position, tax | The answer to most questions is in ~40 lines |
-| 3 | Aggregates: trial balance, balance sheet, partners | Depth when the question needs it |
-| 4 | Document tables: invoices, bills, open AR/AP | Most tokens, least often needed line-by-line |
-| 5 | Gaps: "the following could not be read…" | Last thing read before the question |
+| 2 | Headline: P&L, cash position, runway, tax accrued | The answer to most questions is in ~30 lines |
+| 3 | **Trailing 12 months, one row per month** | Renders as a table the model can read as a trend — the context that stops a one-off bill reading as a crisis |
+| 4 | Aggregates: trial balance, balance sheet, partners | Depth when the question needs it |
+| 5 | Document tables: invoices, bills, open AR/AP | Most tokens, least often needed line-by-line |
+| 6 | Gaps: "the following could not be read…", "books still settling" | Last thing read before the question |
 
-**Token budget.** Documents dominate: ~310 document rows plus ~250 aggregate rows as compact
-pipe-delimited tables lands around **20–30K tokens** against a 1M window. Two orders of magnitude of
-headroom — the aggregates are what keep it there, since reports 5–13 replace thousands of GL lines
-with tens.
+**Position 3 is new and it is deliberately high.** The model sees the trend *before* it sees July's
+own numbers in detail, which is the order a CFO reads them in — and it's the structural defence
+against the accrual-spike failure mode in [§4](#things-that-cost-a-day-if-you-learn-them-late).
+Twelve rows of six figures is a rounding error in tokens and it changes the character of the answers.
 
-Caps: `MAX_DOCUMENTS = 500` per ledger, `MAX_CASH_LINES = 300`. Over the cap, keep the **largest by
+**Token budget.** ~110 document rows plus ~300 aggregate rows (trailing series included) as compact
+pipe-delimited tables lands around **8–12K tokens** against a 1M window — roughly a third of the
+quarterly design's. Two things follow: the caps below almost never bind for a single month, and
+there is room for Phase 1.5 to add live balances or a second month without re-architecting anything.
+
+Caps: `MAX_DOCUMENTS = 500` per ledger, `MAX_CASH_LINES = 200`. Over the cap, keep the **largest by
 absolute amount** (not the most recent — a CFO question is about the big ones), keep the aggregate
 totals, which stay exact, and record a `BookGap`.
 
@@ -966,7 +1144,7 @@ report.**
 // composition/container.ts
 export function buildContainer(env: Env) {
   const clock = new SystemClock();
-  const rpc = new OdooXmlRpcClient(env);
+  const rpc = new OdooJsonApiClient(env);
   const mapper = new OdooMapper();
 
   // The catalogue. Order is irrelevant — the assembler runs them concurrently.
@@ -976,7 +1154,7 @@ export function buildContainer(env: Env) {
     new OpenReceivablesReport(rpc, mapper),    // 3
     new OpenPayablesReport(rpc, mapper),       // 4
     new ProfitAndLossReport(rpc, mapper),      // 5
-    new PriorQuarterPnLReport(rpc, mapper),    // 6
+    new TrailingMonthsReport(rpc, mapper),     // 6  ← trailing 12m, see §4
     new TrialBalanceReport(rpc, mapper),       // 7
     new BalanceSheetReport(rpc, mapper),       // 8
     new CashPositionReport(rpc, mapper),       // 9
@@ -988,7 +1166,7 @@ export function buildContainer(env: Env) {
     new CompanyProfileReport(rpc, mapper),     // 15
   ];
 
-  const live = new OdooAccountingRepository(new QuarterlyBookAssembler(reports, clock));
+  const live = new OdooAccountingRepository(new MonthlyBookAssembler(reports, clock));
   const accounting = new CachingAccountingRepository(
     env.USE_FIXTURES ? new FixtureBookRepository(loadFixtureBooks()) : live,
     new InMemoryStore(),
@@ -1002,8 +1180,8 @@ export function buildContainer(env: Env) {
   const channel = new LinqConversationChannel(env.LINQ_API_KEY, env.LINQ_PHONE_NUMBER);
   const clients = new InMemoryClientRegistry(loadClientsFromEnv(env));
 
-  const answer = new AnswerQuarterlyQuestion(
-    clients, accounting, reasoner, new AnswerValidator(), clock,
+  const answer = new AnswerMonthlyQuestion(
+    clients, accounting, reasoner, new AnswerValidator(), new RunwayEstimator(), clock,
   );
 
   return { answer, channel, presenter: new IMessageAnswerPresenter(new MoneyFormatter()) };
@@ -1011,8 +1189,10 @@ export function buildContainer(env: Env) {
 ```
 
 **`USE_FIXTURES` is the highest-value line in the file.** And a fixture is now trivially producible:
-run the assembler once against real Odoo, `JSON.stringify` the book, commit it. **A closed quarter's
-book is a perfect fixture, because it's exactly as immutable as the real thing.**
+run the assembler once against real Odoo, `JSON.stringify` the book, commit it. **A settled month's
+book is a perfect fixture, because it's exactly as immutable as the real thing.** Capture two
+adjacent months while you're there — it costs one extra run and it's what lets you rehearse a
+follow-up about a different period offline.
 
 ---
 
@@ -1030,9 +1210,9 @@ LINQ_PHONE_NUMBER=
 LINQ_WEBHOOK_SECRET=
 
 # Odoo — read-only service user, see tech_stack.md §5
+# JSON-2 API: the bearer key resolves both the database and the user,
+# so no ODOO_DB / ODOO_USERNAME.
 ODOO_URL=
-ODOO_DB=
-ODOO_USERNAME=
 ODOO_API_KEY=
 
 # Phase 1 only
@@ -1041,9 +1221,17 @@ USE_FIXTURES=false         # run the demo with no live Odoo
 REPORT_CONCURRENCY=6       # parallel Odoo calls — see §7
 REPORT_TIMEOUT_MS=8000     # per report; a timeout is a gap, not a failure
 BOOK_CACHE_ENABLED=true
+SETTLING_DAYS=10           # days after month end before books count as settled — see §3
+TRAILING_MONTHS=12         # window for report 6; 12 gives same-month-last-year
+RUNWAY_WINDOW_MONTHS=3     # months of burn averaged for runway — see §5
 ```
 
 Four secrets to boot. No Stripe, no Terac, no Mongo.
+
+`SETTLING_DAYS` is the one to think about rather than copy. It decides which month Tammy talks about
+by default, so it is a product setting wearing a config variable's clothes: too low and the monthly
+close-out goes out on a half-posted ledger, too high and it arrives when the owner has stopped
+caring. Ten days is a starting guess — **ask the client's bookkeeper what day they close.**
 
 ---
 
@@ -1052,27 +1240,35 @@ Four secrets to boot. No Stripe, no Terac, no Mongo.
 | #   | Step                                          | Layers built                                                             | Done when                                                |
 | --- | --------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------- |
 | 1   | Health check + Linq echo                      | `adapters/inbound/linq`, `LinqConversationChannel`, `composition/`       | Texting the number echoes back                           |
-| 2   | `Money`, `Period`, `Quarter`                  | `domain/model` — pure, no I/O                                            | Quarter boundary tests green, network unplugged          |
-| 3   | Assembler + **two** reports (P&L, CashPosition) | `LedgerReport`, `QuarterlyBookAssembler`, `OdooXmlRpcClient`, `OdooMapper` | A script prints Q2's revenue and bank balance as `Money` |
+| 2   | `Money`, `Period`, `Month`                  | `domain/model` — pure, no I/O                                            | Month boundary tests green (Feb, a 30-day month, a leap year), network unplugged |
+| 3   | Assembler + **two** reports (P&L, CashPosition) | `LedgerReport`, `MonthlyBookAssembler`, `OdooJsonApiClient`, `OdooMapper` | A script prints July's revenue and bank balance as `Money` |
 | 4   | Verify against Odoo's own UI                  | —                                                                        | **The two numbers match what Odoo reports on screen**    |
-| 5   | The remaining 13 reports                      | `adapters/outbound/odoo/reports/`                                        | Full book assembles; gaps empty                          |
-| 6   | Claude answers over the book                  | `ReasoningEngine`, `BookRenderer`, `AnswerQuarterlyQuestion`, `AnswerValidator` | A question in → a grounded answer out              |
-| 7   | Reply in the thread with the as-of footer     | `IMessageAnswerPresenter`, wiring in `LinqWebhookController`              | **The Phase 1 demo runs end to end**                     |
-| 8   | Caching + fixture capture                     | `CachingAccountingRepository`, `FixtureBookRepository`                    | Follow-up questions answer in ~1s; demo runs offline     |
+| 5   | **Report 6 — trailing 12 months**             | `TrailingMonthsReport`, `TrailingMonths`, `RunwayEstimator`               | Twelve months print as a table; runway is a number you'd say out loud |
+| 6   | The remaining 12 reports                      | `adapters/outbound/odoo/reports/`                                        | Full book assembles; gaps empty                          |
+| 7   | Claude answers over the book                  | `ReasoningEngine`, `BookRenderer`, `AnswerMonthlyQuestion`, `AnswerValidator` | A question in → a grounded answer out              |
+| 8   | Reply in the thread with the as-of footer     | `IMessageAnswerPresenter`, wiring in `LinqWebhookController`              | **The Phase 1 demo runs end to end**                     |
+| 9   | Caching + settling + fixture capture          | `CachingAccountingRepository`, `Month.isSettled`, `FixtureBookRepository` | Follow-up questions answer in ~1s; demo runs offline     |
 
 **Step 4 is not optional and it is not a formality.** The sign convention on income accounts
 ([§4](#things-that-cost-a-day-if-you-learn-them-late)) makes "confidently wrong" the default failure
 mode, and a P&L that's negated is worse than one that's missing. Two reports verified against the UI
 before writing the other thirteen means you find the convention bug once, not fourteen times.
 
-Steps 3 and 5 before step 6, always. **The unglamorous half is the risky half** — Claude answering
+**Step 5 is pulled forward on purpose** — it was report 6 of 15 in the quarterly plan and it is the
+first thing to build after the ledger is proven here. It is the report the cadence exists for, it is
+the one whose `date:month` grouping and label mapping can surprise you
+([§4](#things-that-cost-a-day-if-you-learn-them-late)), and a month with no trend beside it is a
+thinner product than a quarter with none. Twelve months on screen is also the fastest way to eyeball
+whether the sign convention is right across the whole year, not just July.
+
+Steps 3, 5 and 6 before step 7, always. **The unglamorous half is the risky half** — Claude answering
 over a JSON fixture works on the first try; Odoo's API is where days disappear.
 
 ### Testing follows the rings
 
 | Layer          | Test style                                    | Mocks            | Speed |
 | -------------- | --------------------------------------------- | ---------------- | ----- |
-| `domain/`      | Plain unit tests — `Quarter` boundaries, `AgingAnalyzer`, `Money` | **Zero** | µs |
+| `domain/`      | Plain unit tests — `Month` boundaries, `AgingAnalyzer`, `Money` | **Zero** | µs |
 | `application/` | Use case tests against a fixture book         | Fakes, not mocks | ms    |
 | Assembler      | Fake `LedgerReport`s that throw / hang / succeed | Fakes         | ms    |
 | `adapters/`    | One contract test per report against a sandbox | Vendor sandbox  | slow  |
@@ -1083,7 +1279,7 @@ report makes `isUsable()` false and a failing Optional one doesn't.
 
 ### Where to cut corners
 
-Keep [§1](#1-the-one-rule) (dependency rule), `Money`, `Quarter`, and the presenter. Ship fewer
+Keep [§1](#1-the-one-rule) (dependency rule), `Money`, `Month`, and the presenter. Ship fewer
 reports — the catalogue is a list, and eight of them still demo well. Skipping the sign-convention
 verification in step 4 is how you lose the demo.
 
@@ -1091,20 +1287,21 @@ verification in step 4 is how you lose the demo.
 
 ## 15. Seams — what Phase 2 plugs into
 
-**None of these modify `AnswerQuarterlyQuestion`'s shape or anything in `domain/model`.**
+**None of these modify `AnswerMonthlyQuestion`'s shape or anything in `domain/model`.**
 
 | Phase 2 feature | Plugs in as | What moves |
 |---|---|---|
 | A 16th report (inventory, payroll, analytics) | One `LedgerReport` class + one line in `container.ts` | **Nothing else.** The assembler is generic over its sources. |
 | Tool loop / agentic retrieval | `ReasoningEngine.answer` → `reason()` with a `ReasoningOutcome` union; add `ToolRegistry` | Use case gains a loop. **Each report becomes a tool** — the catalogue is already the tool list. |
-| Live "as of today" answers | A `Period.toDate(now)` variant of the same reports | `Quarter` stops being the only input; reports are unchanged. |
-| Multi-quarter / trend questions | Assemble N books, or a `BookSeries` value object | Assembler runs per quarter; caching makes it nearly free. |
-| Runway, burn, scenarios | `RunwayCalculator` in `domain/services` | New pure class; `QuarterlyBook` is already its input. |
+| Live "as of today" answers | A `Period.toDate(now)` variant of the same reports | `Month` stops being the only input; reports are unchanged. Monthly already shrinks this from a gap to a nicety. |
+| Multi-month questions beyond report 6's window | Assemble N books, or a `BookSeries` value object | Assembler runs per month; caching makes it nearly free. Anything inside twelve months is already answered. |
+| **Tax filing periods** (quarterly VAT from monthly books) | `TaxPeriod` value object spanning months + a summing domain service | No new query — three cached books. The honest gap named in [§4](#4-the-report-catalogue). |
+| Forecasting, scenarios, "what if we hire" | `Forecast` domain service; `RunwayEstimator` is its backward-looking half | Runway itself already shipped in Phase 1 ([§5](#5-the-domain-model)) — the seam is projection, not arithmetic. |
 | Terac expert review | `ExpertPanel` port + `EscalationPolicy` domain service | New use case; `AnswerResult` grows a field. |
 | Payments | `PaymentGateway` port + `Engagement` aggregate | New use cases. Phase 1 has no billing concept to unwind. |
 | Interactive cards | `ConversationChannel.sendCard` + a second presenter | **New presenter, not a new use case** — the §9 payoff. |
 | Dashboard | `adapters/inbound/http` + `DashboardPresenter` | No new business logic, by construction. |
-| A second ledger vendor (QuickBooks) | New `LedgerReport` implementations; reuse `QuarterlyBookAssembler` | The assembler is vendor-neutral already — that's why it lives in `accounting/`, not `odoo/`. |
+| A second ledger vendor (QuickBooks) | New `LedgerReport` implementations; reuse `MonthlyBookAssembler` | The assembler is vendor-neutral already — that's why it lives in `accounting/`, not `odoo/`. |
 
 Two checks on whether Phase 1 was built right:
 

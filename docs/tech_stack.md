@@ -125,17 +125,32 @@ a liability, and "we only read" is a sentence you can say to a prospect.
 verify against the actual instance before building, since a new major ships each autumn
 and the client's DB may lag.
 
-**Access:** Odoo's external API. XML-RPC is the stable, documented path that has survived
-every version — `/xmlrpc/2/common` to authenticate, `/xmlrpc/2/object` to call
-`execute_kw`. JSON-RPC at `/jsonrpc` is equivalent if that's easier from our runtime. Both
-are the safe bet; newer REST-style surfaces vary by version and edition, so don't design
-around one without confirming it exists on the target instance.
+**Access: the JSON-2 API** — `POST /json/2/<model>/<method>` with
+`Authorization: Bearer <api-key>`. Verified working against our instance
+(`prodi-technologies-bv`, Odoo 19.0+e).
+
+> ⚠️ **This reverses an earlier decision to use XML-RPC**, which was chosen as "the stable
+> path that has survived every version". It hasn't survived this one. Two findings from
+> wiring the real instance:
+>
+> 1. **XML-RPC auth is broken for API keys on Odoo 19 Online.** `/xmlrpc/2/common`
+>    `authenticate` returns `false` for a valid key that JSON-2 accepts immediately. Odoo
+>    19 moved RPC into a dedicated `rpc` addon, and legacy auth appears to have been left
+>    behind. This costs a day if you debug it as a credentials problem — it isn't one.
+> 2. **XML-RPC and JSON-RPC are both slated for removal in Odoo 20**, targeted autumn 2026.
+>    Building on `/xmlrpc/2/*` today means a forced migration within one release.
+>
+> JSON-2 is therefore both the only thing that works and the forward-compatible choice.
+
+The bearer key resolves the database (from the hostname) and the user, so there is no
+separate authenticate round-trip, and **no db name or login is needed** — see §11.
 
 **Enforcing read-only:** don't rely on our code being well-behaved. Create a dedicated
 Odoo user for Tamoa with read access groups only (Accounting → Read, no create/write/
-unlink on `account.*`). Then a bug can't write even if it tries. Our client should also
-whitelist `search_read` / `read` / `search_count` as the only permitted `execute_kw`
-methods.
+unlink on `account.*`), and generate the API key while logged in as that user — a key is
+bound to whoever created it. Then a bug can't write even if it tries. Our client reinforces
+this structurally: `OdooJsonApiClient` keeps its generic `call()` private and exposes only
+`search_read` / `read` / `search_count`, so no write method is reachable from the codebase.
 
 Models we care about:
 
@@ -153,10 +168,21 @@ buckets (0–30 / 31–60 / 61–90 / 90+), gross margin trend, top-5 customer c
 > ⚠️ Odoo's API surface differs across major versions and between Odoo Online (SaaS) and
 > self-hosted. Confirm the instance's actual version and that the DB allows external API
 > access before wiring the client — this is the integration most likely to eat time. On
-> Odoo Online in particular, external API access can be restricted.
+> Odoo Online in particular, external API access can be restricted, and it is reportedly
+> unavailable on the One App Free and Standard plans.
 
-**Auth:** database name + username + API key (generate under Settings → Account Security →
-Developer API Keys). Never the account password.
+**Auth:** an API key alone (generate under avatar → My Profile → Account Security →
+Developer API Keys, as the service user). Never the account password. Odoo 17+ keys carry
+an expiry — set one that outlives the event.
+
+**Verify before building on it.** One command distinguishes "credentials wrong" from
+"instance won't serve the API at all":
+
+```bash
+curl -sS -X POST "$ODOO_URL/json/2/res.users/context_get" \
+  -H "Authorization: Bearer $ODOO_API_KEY" -H 'Content-Type: application/json' -d '{}'
+# → {"lang": "en_US", "tz": "...", "uid": 2}
+```
 
 ---
 
@@ -294,9 +320,10 @@ LINQ_CHECKOUT_SLUG=              # partner slug in checkout_url
 
 # Odoo  (read-only service user — see §5)
 ODOO_URL=            # https://<company>.odoo.com
-ODOO_DB=
-ODOO_USERNAME=       # dedicated Tamoa user, read groups only
 ODOO_API_KEY=        # Developer API key, never the account password
+# ODOO_DB / ODOO_USERNAME are NOT needed: the JSON-2 API resolves the database
+# from the hostname and the user from the bearer key. They were required by the
+# XML-RPC path we no longer use — see §5.
 
 # Stripe
 STRIPE_SECRET_KEY=           # sk_ — server only, NEVER shared

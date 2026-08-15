@@ -158,7 +158,7 @@ src/
 │   │   ├── stripe/              StripeWebhookController   (reconciliation)
 │   │   └── terac/               TeracCallbackController
 │   └── outbound/
-│       ├── odoo/                OdooAccountingRepository  OdooMapper  OdooXmlRpcClient
+│       ├── odoo/                OdooAccountingRepository  OdooMapper  OdooJsonApiClient
 │       ├── claude/              ClaudeReasoningEngine  ClaudeMessageMapper
 │       ├── payments/            LinqPaymentGateway  LinqPaymentMapper   (see §9)
 │       ├── linq/                LinqConversationChannel
@@ -476,7 +476,7 @@ the >10% rule from `tech_stack.md` §6 now has exactly one home in the codebase.
 ## 6. Driven ports — what the outside world must provide
 
 These interfaces are **owned by the application layer and phrased in domain terms**. Not one of them
-mentions XML-RPC, a Stripe price ID, or an Anthropic content block.
+mentions an Odoo model name, a Stripe price ID, or an Anthropic content block.
 
 ```mermaid
 classDiagram
@@ -752,7 +752,7 @@ sequenceDiagram
     U->>R: reason(ReasoningRequest)
     R-->>U: ReasoningOutcome — tool_calls: get_financials
     U->>O: getFinancials(clientId, period)
-    Note over O: XML-RPC → OdooMoveRecord → mapper
+    Note over O: JSON-2 API → OdooMoveRecord → mapper
     O-->>U: FinancialSnapshot + Evidence
     U->>R: reason(request + ToolResult)
     R-->>U: ReasoningOutcome — answer + citedFigures
@@ -1030,7 +1030,7 @@ overkill at this size and its magic costs more than it saves.
 export function buildContainer(env: Env) {
   // Outbound adapters — the only place vendor SDKs are constructed
   const clock = new SystemClock();
-  const accounting = new OdooAccountingRepository(new OdooXmlRpcClient(env), new OdooMapper());
+  const accounting = new OdooAccountingRepository(OdooJsonApiClient.fromEnv(), new OdooMapper());
   const reasoner = new ClaudeReasoningEngine(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }));
   const channel = new LinqConversationChannel(env.LINQ_API_KEY, env.LINQ_PHONE_NUMBER);
   const experts = new TeracExpertPanel(env.TERAC_API_KEY);

@@ -10,7 +10,7 @@ This page is the short checklist; the script page has the full bubbles.
 
 1. `Thanks`
 2. `What’s my main cost category right now?`
-3. `Anything unexpected vs the last few weeks?`
+3. `Anything unexpected vs the last few months?`
 4. Hiring / cash-flow / raise hard question (see imessage_flow)
 5. Hire profile (role, $ , start date)
 
@@ -20,7 +20,7 @@ Max **two** dig-ins before the hard question.
 
 ## Agent must send (Tammy)
 
-1. Weekly report (Odoo numbers) — introduce as Tammy from Tamoa once
+1. Monthly report (Odoo numbers, when the books settle) — introduce as Tammy from Tamoa once
 2. Answers to dig-ins (Odoo)
 3. Profile ask → booking link + brief URL at **book** time (not at report open)
 4. Stripe link
@@ -36,5 +36,5 @@ Max **two** dig-ins before the hard question.
 
 ## Terac (human input → better project)
 
-Show experts the weekly / hiring take; rate safe? / missing risk? / rewrite.
+Show experts the monthly / hiring take; rate safe? / missing risk? / rewrite.
 Before = first take · After = updated bubble or brief.

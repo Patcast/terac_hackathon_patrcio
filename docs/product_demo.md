@@ -11,7 +11,7 @@ Feedback: [feedback_product_demo.md](./feedback_product_demo.md)
 
 ## One-line pitch
 
-> Text Tammy — your CFO from Tamoa. Weekly numbers from your books, a real expert when
+> Text Tammy — your CFO from Tamoa. Monthly numbers from your books, a real expert when
 > it matters, and you can book + pay in the same thread.
 
 **Naming:** **Tamoa** = product · **Tammy** = the iMessage agent.
@@ -20,8 +20,8 @@ Feedback: [feedback_product_demo.md](./feedback_product_demo.md)
 
 Agent-led. Full copy: [imessage_flow.md](./imessage_flow.md).
 
-1. **Agent reaches out** — weekly report over iMessage (cash / runway / one risk).
-2. **Short dig-ins (max two)** — e.g. main cost category; anything unexpected vs prior weeks.
+1. **Agent reaches out** — monthly report over iMessage, when the books settle (cash / runway / one risk).
+2. **Short dig-ins (max two)** — e.g. main cost category; anything unexpected vs prior months.
 3. **Hard question** — hiring / cash-flow impact / raise — needs a human CFO.
 4. **Prep + book** — agent asks hire profile, then sends booking link + graphical brief
    URL (“these numbers will be reviewed by the CFO”).
@@ -37,11 +37,11 @@ Replay. Details in the iMessage script.
 
 | Beat | What happens | Why it matters |
 |---|---|---|
-| 1. Outreach | Agent texts first with a weekly report + question | Proactive CFO, not a chatbot inbox |
+| 1. Outreach | Agent texts first with a monthly report + question | Proactive CFO, not a chatbot inbox |
 | 2. Ground | Numbers come from Odoo | Not a Claude wrapper |
 | 3. Reply | Owner answers in iMessage | Real conversational loop (Linq) |
 | 4. Book expert | Booking link for a fractional CFO call | Human expertise, timely |
-| 5. Improve | Human feedback → updated weekly brief (before → after) | Required Terac / hackathon human loop |
+| 5. Improve | Human feedback → updated monthly brief (before → after) | Required Terac / hackathon human loop |
 | 6. Charge | Stripe payment link in the same thread | Revenue / Agent-Run Company track |
 
 **Optional:** open the shared call brief + mention Replay QA (see arc below).
@@ -55,7 +55,7 @@ call is the product; it is **not** by itself the before/after.
 
 **What we show**
 
-- **Before:** agent’s first weekly brief / recommendation (from Odoo numbers)
+- **Before:** agent’s first monthly brief / recommendation (from Odoo numbers)
 - **Input:** human feedback on that brief (via Terac — and/or comments from the CFO call
   that we fold in the same way): safe? missing risk? 1–2 sentence fix
 - **After:** same thread or shared brief shows the **updated** recommendation
@@ -76,7 +76,7 @@ Rough timing. Stay flexible; keep this shape.
 | Time | On screen / phone | Say / show |
 |---|---|---|
 | 0:00–0:10 | Logo / one sentence | Small biz with Odoo — **Tammy** (Tamoa) texts first |
-| 0:10–0:35 | iMessage | Weekly report → dig-ins (≤2) proving ledger knowledge |
+| 0:10–0:35 | iMessage | Monthly report → dig-ins (≤2) proving ledger knowledge |
 | 0:35–0:55 | Same thread | Hard question (hire / cash flow / raise) → profile ask |
 | 0:55–1:15 | Same thread | **Book CFO** + brief link (“graphical view… CFO will review”) |
 | 1:15–1:25 | Thread or brief | **Before → after** after human feedback |
@@ -90,7 +90,7 @@ before/after → pay. Exact lines: [imessage_flow.md](./imessage_flow.md).
 
 Only if the iMessage path already works. Details: [ux_replay.md](./ux_replay.md).
 
-- **What it is:** one **shared call brief** (Lovable): weekly numbers, agent recommendation,
+- **What it is:** one **shared call brief** (Lovable): monthly numbers, agent recommendation,
   owner’s reply, suggested decision, **Book** + **Pay**.
 - **Who it’s for:** **both** the company owner and the human fractional CFO during their
   live conversation — same URL, same facts (not a separate accountant product).
@@ -103,8 +103,8 @@ Only if the iMessage path already works. Details: [ux_replay.md](./ux_replay.md)
 
 Ship in this order. Stop when the non-negotiable arc works end-to-end.
 
-1. **Linq outbound** — weekly report first.
-2. **Odoo-backed dig-ins** — cost category + unexpected vs prior weeks (max two).
+1. **Linq outbound** — monthly report first.
+2. **Odoo-backed dig-ins** — cost category + unexpected vs prior months (max two).
 3. **Hard question path** — hire profile → booking link + brief URL at book time.
 4. **Stripe once** — payment link in thread.
 5. **Terac / before-after** — updated recommendation visible.
@@ -131,7 +131,7 @@ Do not build a custom scheduler.
 ## Explicitly out of scope for v1 demo
 
 - Writing back to Odoo (product rule: read-only forever)
-- Long multi-week automation (one weekly outreach is enough to demo)
+- Long multi-month automation (one monthly outreach is enough to demo)
 - Perfect pricing model (one Payment Link is enough)
 - A polished web app as the *main* surface (iMessage is the product; web is optional)
 
@@ -140,7 +140,7 @@ Do not build a custom scheduler.
 ## Open decisions (keep tiny)
 
 - Which sample business / Odoo DB we point at
-- Exact weekly-report + question wording → owned by [imessage_flow.md](./imessage_flow.md)
+- Exact monthly-report + question wording → owned by [imessage_flow.md](./imessage_flow.md)
 - Whose calendar the booking link points at (live mentor / recruited CFO / team member)
 - Whether CFO-call comments and Terac ratings are the same feedback path or parallel
 
