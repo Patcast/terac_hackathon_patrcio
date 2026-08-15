@@ -23,7 +23,7 @@ Entry 3 full — polish after basic flow).
 | 4 | Dig-in 1 answer | Tammy | Odoo-backed |
 | 5 | Dig-in 2 | Owner → Tammy | Second (max) interaction |
 | 6 | Dig-in 2 answer | Tammy | Odoo-backed |
-| 7 | Hard question | Owner | Hiring / cash flow / raise — needs human CFO |
+| 7 | Hard question | Owner | Fund the engineer hire (options + trade-offs) — needs human |
 | 8 | Prep ask | Tammy | Hire profile for the brief |
 | 9 | Profile | Owner | Prep input |
 | 10 | Book + brief link | Tammy | Cal.com + graphical brief (Entry 2 partial) |
@@ -98,25 +98,31 @@ Nothing else jumps out as unusual in the ledger.
 ### 7 — Owner: hard question (needs human)
 
 ```
-Owner: I’m thinking about hiring someone to help build the product. I don’t fully
-get how that hits cash flow — can we afford it, or do we need to raise?
+Owner: We’re a startup and want to hire an engineer to ship the product faster.
+Can you help us figure out how to pay for that — and what the trade-offs are?
+
+We need someone who can look at cost first, then options like a bank loan,
+angels, friends & family, maybe VC, grants, or even making them a co-founder
+instead of a salary hire. We’ll share our priorities and timeline; we also need
+to hear if the honest answer is “you can’t hire yet.”
 ```
 
-### 8 — Tammy: prep, then offer CFO
+### 8 — Tammy: prep, then offer finance expert
 
 **Primary (use this):**
 
 ```
-I can sketch the cash math from your books (runway vs a ~$[MONTHLY]/mo hire), but
-“can you afford it vs should you raise?” isn’t only a spreadsheet call — it
-depends on how sure you are on revenue, how fast you’d cut if things slip,
-and how much dilution you’d accept.
+I can pull the cost from your books — runway vs a ~$[MONTHLY]/mo engineer hire —
+but “how should you fund it?” isn’t only a spreadsheet call. Loan vs angels vs
+friends & family vs VC vs grant vs co-founder equity each has different trade-offs
+(cost of capital, speed, dilution, control), and it has to match your priorities
+and timeline. Sometimes the right call is don’t hire yet.
 
-How about we get a fractional CFO on a short call to pressure-test that with
-you? I’ll prep the numbers either way.
+How about we get a finance expert on a short call to walk those options with you?
+I’ll prep the cash numbers either way.
 
 Quick — what’s the hire profile so I can put a clean brief together?
-(role, rough $ /mo or /yr, FT vs contract, when you’d start)
+(role, rough $ /mo or /yr, FT vs contract vs possible co-founder, when you’d start)
 ```
 
 **Backup (if primary feels too long on camera):**
@@ -124,7 +130,7 @@ Quick — what’s the hire profile so I can put a clean brief together?
 ```
 Good question — that’s a judgment call, not just a number pull.
 
-To prep a solid brief for you and our fractional CFO: what’s the hire profile?
+To prep a solid brief for you and our finance expert: what’s the hire profile?
 (role, seniority, rough salary or monthly cost, full-time vs contract, when you’d start)
 ```
 
@@ -142,7 +148,7 @@ Send **when the call is booked / offered**, not with the opening weekly report.
 ```
 Got it — I’ll prep cash-flow impact vs runway with that profile.
 
-Book 20 min with our fractional CFO (same numbers, go deeper on afford vs raise):
+Book 20 min with our finance expert (cost + funding options / trade-offs):
 [CAL_COM_OR_CALENDLY_URL]
 
 If you want a more graphical view, tap here: [BRIEF_URL]
@@ -186,7 +192,7 @@ Say these in order (short):
 1. `Thanks`
 2. `What’s my main cost category right now?`
 3. `Anything unexpected vs the last few weeks?`
-4. `I’m thinking about hiring someone to help build the product. I don’t fully get how that hits cash flow — can we afford it, or do we need to raise?`
+4. Hard question — use step 7 primary (hire engineer → how to fund it + trade-offs; OK if answer is don’t hire yet).
 5. `Mid-level engineer, ~$X/yr, full-time, starting next month.` *(pick real $ for the demo DB)*
 
 ---
