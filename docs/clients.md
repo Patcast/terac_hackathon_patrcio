@@ -1,0 +1,2 @@
+- Ask friends to review it and make purchases.
+- Arthur, or Jochen or Tim
